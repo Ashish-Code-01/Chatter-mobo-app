@@ -46,7 +46,7 @@ export const verifyUser = async (req, res) => {
             });
         }
 
-        user.isVerified = true;
+        user.isverified = true;
         user.otp = null;
         await user.save();
 
