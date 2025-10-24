@@ -5,22 +5,42 @@ enableScreens();
 import * as React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useState, useEffect } from 'react';
+
 
 import WelcomeScreen from './src/screens/auth/WelcomeScreen';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import OTPScreen from './src/screens/auth/OtpScreen';
-import EditDetails from './src/screens/auth/EditDetails';
+import EditDetailsScreen from './src/screens/auth/EditDetails';
+import HomeScreen from './src/screens/dashbord/Home';
 
 const Stack = createNativeStackNavigator();
-
 export default function App() {
+  const [initialRoute, setInitialRoute] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkToken = async () => {
+      const token = await AsyncStorage.getItem('token');
+      setInitialRoute(token ? 'Home' : 'Welcome');
+    };
+
+    checkToken();
+  }, []);
+
+  // Show a loading screen while checking for token
+  if (initialRoute === null) {
+    return "Home"; // Or return a loading component
+  }
+
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Welcome">
+      <Stack.Navigator initialRouteName={initialRoute}>
         <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Otp" component={OTPScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="EditDetails" component={EditDetails} options={{ headerShown: false }} />
+        <Stack.Screen name="EditDetails" component={EditDetailsScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

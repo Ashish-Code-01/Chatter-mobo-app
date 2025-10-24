@@ -23,20 +23,25 @@ const OtpScreen = ({ route, navigation }: { route: any, navigation: any }) => {
         try {
             const response = await axios.post('https://chatter-mobo-app.vercel.app/auth/verify', {
                 phoneNumber: phone,
-                otp,
+                otp: otp,
             });
+
             if (response.data.success) {
+                // Save token and user data to AsyncStorage
+                await AsyncStorage.setItem('token', response.data.data.token);
+                await AsyncStorage.setItem('user', JSON.stringify(response.data.data.user));
+
                 Alert.alert('Success', 'OTP verified successfully');
-                // save token and navigate to EditDetails
-                await AsyncStorage.setItem('token', response.data.token);
-                navigation.push('EditDetails');
+                navigation.replace('EditDetails'); // Using replace to prevent going back to OTP screen
             } else {
                 Alert.alert('Error', response.data.message || 'OTP verification failed');
             }
-
-        } catch (error) {
-            console.error(error);
-            Alert.alert('Network Error', 'Unable to reach the server');
+        } catch (error: any) {
+            console.error('Verification error:', error.response?.data || error);
+            Alert.alert(
+                'Error',
+                error.response?.data?.message || 'Failed to verify OTP'
+            );
         }
     };
 

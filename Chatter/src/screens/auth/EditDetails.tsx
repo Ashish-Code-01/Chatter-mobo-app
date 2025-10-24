@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const EditDetails = () => {
     const [name, setName] = useState('John Doe');
@@ -34,26 +33,12 @@ const EditDetails = () => {
 
     const handleSave = async () => {
         try {
-            const token = await AsyncStorage.getItem('token');
-            const response = await axios.post(
-                'https://chatter-mobo-app.vercel.app/api/user/update',
-                { name, avatar },
-                {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
+            await axios.post('https://chatter-mobo-app.vercel.app/auth/update', { name, avatar });
 
-            if (response.data.success) {
-                Alert.alert('Success', 'Profile updated successfully');
-            } else {
-                Alert.alert('Error', response.data.message || 'Update failed');
-            }
-        } catch (error: any) {
-            console.error('Update error:', error.response?.data || error.message);
-            Alert.alert('Error', 'Failed to update profile');
+            Alert.alert('Success', 'OTP will be sent');
+        } catch (error) {
+            console.error(error);
+            Alert.alert('Error', 'Something went wrong');
         }
     };
 
