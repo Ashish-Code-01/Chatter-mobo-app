@@ -8,6 +8,7 @@ import {
     Alert
 } from 'react-native';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const OtpScreen = ({ route, navigation }: { route: any, navigation: any }) => {
     const { phone } = route.params;
@@ -26,6 +27,8 @@ const OtpScreen = ({ route, navigation }: { route: any, navigation: any }) => {
             });
             if (response.data.success) {
                 Alert.alert('Success', 'OTP verified successfully');
+                // save token and navigate to EditDetails
+                await AsyncStorage.setItem('token', response.data.token);
                 navigation.push('EditDetails');
             } else {
                 Alert.alert('Error', response.data.message || 'OTP verification failed');
