@@ -17,7 +17,7 @@ const WelcomeScreen = ({ navigation }: any) => {
             {/* Get Started button */}
             <TouchableOpacity
                 style={styles.button}
-                onPress={() => navigation.navigate('Login')} // 👈 change 'Login' to your target screen name
+                onPress={() => navigation.replace('Login')} 
             >
                 <Text style={styles.buttonText}>Get Started</Text>
             </TouchableOpacity>

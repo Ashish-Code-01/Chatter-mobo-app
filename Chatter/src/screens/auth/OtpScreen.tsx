@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import axios from 'axios';
 
-const OtpScreen = ({ route }: { route: any }) => {
+const OtpScreen = ({ route, navigation }: { route: any, navigation: any }) => {
     const { phone } = route.params;
     const [otp, setOtp] = useState('');
 
@@ -20,15 +20,13 @@ const OtpScreen = ({ route }: { route: any }) => {
         }
 
         try {
-            const response = await axios.post('https://your-backend.com/api/verify-otp', {
-                phone,
+            const response = await axios.post('https://chatter-mobo-app.vercel.app/auth/verify', {
+                phoneNumber: phone,
                 otp,
             });
-
             if (response.data.success) {
                 Alert.alert('Success', 'OTP verified successfully');
-                // Navigate to Home or Chat screen
-                // navigation.replace('Home');
+                navigation.push('EditDetails');
             } else {
                 Alert.alert('Error', response.data.message || 'OTP verification failed');
             }

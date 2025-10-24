@@ -7,7 +7,7 @@ import {
     TouchableOpacity,
     Alert,
 } from 'react-native';
-// import axios from 'axios';
+import axios from 'axios';
 
 const LoginScreen = ({ navigation }: any) => {
     const [phone, setPhone] = useState('');
@@ -18,17 +18,18 @@ const LoginScreen = ({ navigation }: any) => {
             return;
         }
         Alert.alert('Success', 'OTP will be sent');
-        navigation.navigate('Otp', { phone });
+        navigation.replace('Otp', { phone });
 
-        // try {
-        //     const response = await axios.post('https://your-backend.com/api/login', { phone });
+        try {
+            await axios.post('https://chatter-mobo-app.vercel.app/auth/login', { phoneNumber: phone });
 
-        //     Alert.alert('Success', 'OTP will be sent');
+            Alert.alert('Success', 'OTP will be sent');
 
-        // } catch (error) {
-        //     console.error(error);
-        //     Alert.alert('Error', 'Something went wrong');
-        // }
+
+        } catch (error) {
+            console.error(error);
+            Alert.alert('Error', 'Something went wrong');
+        }
     };
 
     return (
@@ -38,7 +39,7 @@ const LoginScreen = ({ navigation }: any) => {
 
             <TextInput
                 style={styles.input}
-                placeholder="Phone number"
+                placeholder="+91 xxxxx xxxxx"
                 keyboardType="phone-pad"
                 value={phone}
                 onChangeText={setPhone}

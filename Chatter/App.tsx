@@ -9,6 +9,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import WelcomeScreen from './src/screens/auth/WelcomeScreen';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import OTPScreen from './src/screens/auth/OtpScreen';
+import EditDetails from './src/screens/auth/EditDetails';
 
 const Stack = createNativeStackNavigator();
 
@@ -19,6 +20,7 @@ export default function App() {
         <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Otp" component={OTPScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="EditDetails" component={EditDetails} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

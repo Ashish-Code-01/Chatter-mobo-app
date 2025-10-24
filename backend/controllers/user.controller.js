@@ -21,25 +21,51 @@ export const loginUser = async (req, res) => {
 // verify user
 export const verifyUser = async (req, res) => {
     const { phoneNumber, otp } = req.body;
-    if (!phoneNumber || !otp) return res.status(400).json({ success: false, message: "Phone number and OTP is required" });
+
+    if (!phoneNumber || !otp) {
+        return res.status(400).json({
+            success: false,
+            message: "Phone number and OTP are required"
+        });
+    }
+
     try {
         const user = await User.findOne({ phoneNumber });
+
         if (!user) {
-            return res.status(404).json({ success: false, message: "User not found" });
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
         }
+
         if (user.otp !== parseInt(otp)) {
-            return res.status(400).json({ success: false, message: "Invalid OTP" });
+            return res.status(400).json({
+                success: false,
+                message: "Invalid OTP"
+            });
         }
-        user.isverified = true;
+
+        user.isVerified = true;
         user.otp = null;
         await user.save();
-        const tocken = generateToken(user._id);
-        return res.status(200).json({ success: true, data: { user, tocken } });
 
-    }
-    catch (error) {
-        console.log("Error Occuring : ", error.message);
-        return res.status(500).json({ success: false, message: "Server Error" });
+        const token = generateToken(user._id);
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                user,
+                token
+            }
+        });
+    } catch (error) {
+        console.error("Error in verifyUser:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server Error",
+            error: error.message
+        });
     }
 }
 
