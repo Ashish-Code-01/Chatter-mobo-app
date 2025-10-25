@@ -4,6 +4,6 @@ import { authenticate } from "../middleware/auth.js";
 const contactRoute = express.Router();
 
 contactRoute.post("/sync", authenticate, syncContacts);
-contactRoute.get("/registered", authenticate, getRegisteredContacts);
+contactRoute.post("/registered", authenticate, getRegisteredContacts);
 
 export default contactRoute;

@@ -239,16 +239,32 @@ export const getRegisteredContacts = async (req, res) => {
             });
         }
 
-        const registeredUsers = await User.find({
-            phoneNumber: {
-                $in: userContacts.contacts.map(c => c.phoneNumber)
-            }
-        }).select('phoneNumber name avatar');
+        // Process each contact and check registration status
+        const processedContacts = await Promise.all(
+            userContacts.contacts.map(async (contact) => {
+                const registeredUser = await User.findOne({
+                    phoneNumber: contact.phoneNumber
+                }).select('phoneNumber name avatar');
+
+                return {
+                    ...contact.toObject(),
+                    isRegistered: !!registeredUser,
+                    userData: registeredUser || null
+                };
+            })
+        );
+
+        // Separate registered and unregistered contacts
+        const registeredContacts = processedContacts.filter(contact => contact.isRegistered);
+        const unregisteredContacts = processedContacts.filter(contact => !contact.isRegistered);
 
         return res.status(200).json({
             success: true,
             data: {
-                contacts: registeredUsers
+                contacts: {
+                    registered: registeredContacts,
+                    unregistered: unregisteredContacts,
+                }
             }
         });
     } catch (error) {

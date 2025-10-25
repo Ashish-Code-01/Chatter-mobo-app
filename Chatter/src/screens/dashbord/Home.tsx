@@ -1,27 +1,42 @@
-import { StyleSheet, Text, View, Button, Alert, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
-import React, { useEffect, useState } from 'react';
+import {
+    StyleSheet,
+    Text,
+    View,
+    Button,
+    Alert,
+    FlatList,
+    TouchableOpacity,
+    ActivityIndicator,
+    Image,
+    RefreshControl
+} from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import Contacts from 'react-native-contacts';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const Home = () => {
-    const [contactList, setContactList] = useState([]);
+    const [contacts, setContacts] = useState({
+        registered: [],
+        unregistered: [],
+        total: 0
+    });
     const [loading, setLoading] = useState(false);
     const [syncing, setSyncing] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
 
     const requestPermissions = async () => {
         try {
-            const cameraResult = await request(PERMISSIONS.ANDROID.CAMERA);
             const contactsResult = await request(PERMISSIONS.ANDROID.READ_CONTACTS);
-
-            if (cameraResult === RESULTS.GRANTED && contactsResult === RESULTS.GRANTED) {
-                getContacts();
+            if (contactsResult === RESULTS.GRANTED) {
+                await getContacts();
             } else {
-                Alert.alert('Permission Denied', 'Please enable camera and contacts permissions in settings');
+                Alert.alert('Permission Denied', 'Please enable contacts permissions in settings');
             }
         } catch (error) {
             console.error('Error requesting permissions:', error);
+            Alert.alert('Error', 'Failed to request permissions');
         }
     };
 
@@ -34,24 +49,26 @@ const Home = () => {
                 return;
             }
 
-            const formattedContacts = contacts.map(contact => ({
-                displayName: contact.displayName || 'Unknown',
-                phoneNumber: contact.phoneNumbers[0]?.number?.replace(/\s+/g, '') || '',
-                email: contact.emailAddresses[0]?.email || ''
-            }));
+            const formattedContacts = contacts
+                .filter(contact => contact.phoneNumbers?.[0]?.number)
+                .map(contact => ({
+                    displayName: contact.displayName || 'Unknown',
+                    phoneNumber: contact.phoneNumbers[0].number.replace(/\s+/g, ''),
+                    email: contact.emailAddresses?.[0]?.email || ''
+                }));
 
             const response = await axios.post(
-                'https://chatter-mobo-app.vercel.app/api/contact/sync',
+                'https://chatter-mobo-app.vercel.app/api/contacts/sync',
                 { contacts: formattedContacts },
                 {
                     headers: {
-                        token
+                        'Authorization': `Bearer ${token}`
                     }
                 }
             );
 
             if (response.data.success) {
-                Alert.alert('Success', 'Contacts synced successfully');
+                await fetchRegisteredContacts();
             }
         } catch (error) {
             console.error('Sync error:', error);
@@ -61,15 +78,37 @@ const Home = () => {
         }
     };
 
+    const fetchRegisteredContacts = async () => {
+        try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) {
+                Alert.alert('Error', 'Please login again');
+                return;
+            }
+
+            const response = await axios.get(
+                'https://chatter-mobo-app.vercel.app/api/contact/registered',
+                {
+                    headers: {
+                        token
+                    }
+                }
+            );
+
+            if (response.data.success) {
+                setContacts(response.data.data.contacts);
+            }
+        } catch (error) {
+            console.error('Error fetching registered contacts:', error);
+            Alert.alert('Error', 'Failed to fetch contacts');
+        }
+    };
+
     const getContacts = async () => {
         try {
             setLoading(true);
-            const contacts = await Contacts.getAll();
-            const sortedContacts = contacts.sort((a, b) =>
-                (a.displayName || '').localeCompare(b.displayName || '')
-            );
-            setContactList(sortedContacts);
-            await syncContactsWithBackend(sortedContacts);
+            const deviceContacts = await Contacts.getAll();
+            await syncContactsWithBackend(deviceContacts);
         } catch (error) {
             console.error('Error loading contacts:', error);
             Alert.alert('Error', 'Failed to load contacts');
@@ -78,25 +117,44 @@ const Home = () => {
         }
     };
 
-    const renderContactItem = ({ item }: any) => {
-        const phoneNumber = item.phoneNumbers[0]?.number || 'No number';
-        const email = item.emailAddresses[0]?.email || 'No email';
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            await getContacts();
+        } finally {
+            setRefreshing(false);
+        }
+    }, []);
 
-        return (
-            <TouchableOpacity style={styles.contactItem}>
-                <View style={styles.avatarContainer}>
+    const renderContactItem = ({ item }: any) => (
+        <TouchableOpacity
+            style={[styles.contactItem, item.isRegistered && styles.registeredContact]}
+        >
+            <View style={styles.avatarContainer}>
+                {item.userData?.avatar ? (
+                    <Image
+                        source={{ uri: item.userData.avatar }}
+                        style={styles.avatar}
+                    />
+                ) : (
                     <Text style={styles.avatarText}>
-                        {item.displayName?.[0]?.toUpperCase() || '?'}
+                        {(item.userData?.name || item.displayName)?.[0]?.toUpperCase() || '?'}
                     </Text>
-                </View>
-                <View style={styles.contactDetails}>
-                    <Text style={styles.contactName}>{item.displayName || 'Unknown'}</Text>
-                    <Text style={styles.contactInfo}>{phoneNumber}</Text>
-                    <Text style={styles.contactInfo}>{email}</Text>
-                </View>
-            </TouchableOpacity>
-        );
-    };
+                )}
+            </View>
+            <View style={styles.contactDetails}>
+                <Text style={styles.contactName}>
+                    {item.userData?.name || item.displayName || 'Unknown'}
+                </Text>
+                <Text style={styles.contactInfo}>{item.phoneNumber}</Text>
+                {item.isRegistered && (
+                    <View style={styles.badge}>
+                        <Text style={styles.badgeText}>On Chatter</Text>
+                    </View>
+                )}
+            </View>
+        </TouchableOpacity>
+    );
 
     useEffect(() => {
         requestPermissions();
@@ -105,24 +163,45 @@ const Home = () => {
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.title}>Contacts ({contactList.length})</Text>
-                {(loading || syncing) ? (
+                <Text style={styles.title}>
+                    Contacts ({contacts.total})
+                </Text>
+                {(loading || syncing) && (
                     <ActivityIndicator color="#007AFF" />
-                ) : (
-                    <Button
-                        title="Refresh"
-                        onPress={getContacts}
-                    />
                 )}
             </View>
 
-            <FlatList
-                data={contactList}
-                renderItem={renderContactItem}
-                keyExtractor={(item) => item.recordID}
-                style={styles.list}
-                contentContainerStyle={styles.listContent}
-            />
+            {contacts.registered.length > 0 && (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>
+                        On Chatter ({contacts.registered.length})
+                    </Text>
+                    <FlatList
+                        data={contacts.registered}
+                        renderItem={renderContactItem}
+                        keyExtractor={item => item.phoneNumber}
+                        refreshControl={
+                            <RefreshControl
+                                refreshing={refreshing}
+                                onRefresh={onRefresh}
+                            />
+                        }
+                    />
+                </View>
+            )}
+
+            {contacts.unregistered.length > 0 && (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>
+                        Invite to Chatter ({contacts.unregistered.length})
+                    </Text>
+                    <FlatList
+                        data={contacts.unregistered}
+                        renderItem={renderContactItem}
+                        keyExtractor={item => item.phoneNumber}
+                    />
+                </View>
+            )}
         </View>
     );
 };
@@ -146,11 +225,24 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: 'bold',
     },
-    list: {
+    section: {
         flex: 1,
     },
-    listContent: {
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '600',
         padding: 16,
+        backgroundColor: '#f5f5f5',
+    },
+    contactItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+    },
+    registeredContact: {
+        backgroundColor: '#e8f5e9',
     },
     avatarContainer: {
         width: 50,
@@ -161,6 +253,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginRight: 15,
     },
+    avatar: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+    },
     avatarText: {
         color: '#FFF',
         fontSize: 20,
@@ -168,16 +265,6 @@ const styles = StyleSheet.create({
     },
     contactDetails: {
         flex: 1,
-    },
-    contactItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
-        marginBottom: 8,
-        borderRadius: 8,
-        backgroundColor: '#f8f8f8',
     },
     contactName: {
         fontSize: 16,
@@ -188,5 +275,18 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#666',
         marginBottom: 2,
+    },
+    badge: {
+        backgroundColor: '#4CAF50',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 12,
+        alignSelf: 'flex-start',
+        marginTop: 4,
+    },
+    badgeText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '500',
     }
 });
