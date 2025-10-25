@@ -9,6 +9,7 @@ import {
     Alert
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
 const EditDetails = () => {
@@ -31,9 +32,19 @@ const EditDetails = () => {
         );
     };
 
+
     const handleSave = async () => {
+        const token = await AsyncStorage.getItem('token');
+        if (!token) {
+            Alert.alert('Error', 'Please login again');
+            return;
+        }
         try {
-            await axios.post('https://chatter-mobo-app.vercel.app/auth/update', { name, avatar });
+            await axios.post('https://chatter-mobo-app.vercel.app/auth/update', { name, avatar }, {
+                headers: {
+                    token
+                }
+            });
 
             Alert.alert('Success', 'OTP will be sent');
         } catch (error) {

@@ -17,9 +17,11 @@
     "axios": "^1.12.2",
     "react": "19.1.1",
     "react-native": "0.82.1",
+    "react-native-contacts": "^8.0.7",
     "react-native-fs": "^2.20.0",
     "react-native-gesture-handler": "^2.29.0",
     "react-native-image-picker": "^8.2.1",
+    "react-native-permissions": "^5.4.2",
     "react-native-safe-area-context": "^5.5.2",
     "react-native-screens": "^4.18.0",
     "react-native-video": "^6.17.0"

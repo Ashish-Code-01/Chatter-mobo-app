@@ -30,7 +30,7 @@ export default function App() {
 
   // Show a loading screen while checking for token
   if (initialRoute === null) {
-    return "Home"; // Or return a loading component
+    return "Welcome";
   }
 
   return (

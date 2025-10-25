@@ -1,4 +1,5 @@
 import User from "../models/user.model.js";
+import Contact from "../models/contact.model.js";
 import { generateToken } from "../lib/utils.js";
 import cloudinary from "../lib/cloudinary.js";
 
@@ -52,6 +53,9 @@ export const verifyUser = async (req, res) => {
 
         const token = generateToken(user._id);
 
+        console.log(token);
+
+
         return res.status(200).json({
             success: true,
             data: {
@@ -92,10 +96,10 @@ export const updateUser = async (req, res) => {
                 { name },
                 { new: true }
             ).select('-password'); // Exclude password from response
-            
-            return res.status(200).json({ 
-                success: true, 
-                data: updatedUser 
+
+            return res.status(200).json({
+                success: true,
+                data: updatedUser
             });
         }
 
@@ -153,6 +157,102 @@ export const updateUser = async (req, res) => {
 
     } catch (error) {
         console.error("Server Error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server Error",
+            error: error.message
+        });
+    }
+};
+
+
+// sync contacts
+
+export const syncContacts = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { contacts } = req.body;
+
+        if (!contacts || !Array.isArray(contacts)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid contacts data"
+            });
+        }
+
+        // Format phone numbers and filter valid contacts
+        const formattedContacts = contacts
+            .filter(contact => contact.phoneNumber)
+            .map(contact => ({
+                displayName: contact.displayName,
+                phoneNumber: contact.phoneNumber.replace(/[^\d+]/g, ''),
+                email: contact.email
+            }));
+
+        // Update or create contact list for user
+        await Contact.findOneAndUpdate(
+            { userId },
+            {
+                userId,
+                contacts: formattedContacts
+            },
+            { upsert: true, new: true }
+        );
+
+        // Find registered users from contacts
+        const registeredUsers = await User.find({
+            phoneNumber: {
+                $in: formattedContacts.map(c => c.phoneNumber)
+            }
+        }).select('phoneNumber name avatar');
+
+        return res.status(200).json({
+            success: true,
+            message: "Contacts synced successfully",
+            data: {
+                registeredUsers
+            }
+        });
+    } catch (error) {
+        console.error("Contact sync error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server Error",
+            error: error.message
+        });
+    }
+};
+
+// get registered contacts
+
+export const getRegisteredContacts = async (req, res) => {
+    try {
+        const userId = req.user._id;
+
+        const userContacts = await Contact.findOne({ userId });
+        if (!userContacts) {
+            return res.status(200).json({
+                success: true,
+                data: {
+                    contacts: []
+                }
+            });
+        }
+
+        const registeredUsers = await User.find({
+            phoneNumber: {
+                $in: userContacts.contacts.map(c => c.phoneNumber)
+            }
+        }).select('phoneNumber name avatar');
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                contacts: registeredUsers
+            }
+        });
+    } catch (error) {
+        console.error("Error fetching registered contacts:", error);
         return res.status(500).json({
             success: false,
             message: "Server Error",
