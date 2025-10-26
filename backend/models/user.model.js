@@ -2,11 +2,11 @@ import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema({
     phoneNumber: {
-        type: Number,
+        type: String,
         required: true,
         unique: true,
         minlength: 10,
-        maxlength: 10,
+        maxlength: 13,
     },
     name: {
         default: "User",
@@ -18,6 +18,10 @@ const userSchema = new mongoose.Schema({
     },
     otp: {
         type: Number,
+    },
+    otpExpiry : {
+        type: Date,
+        required: true,
     },
     isverified: {
         type: Boolean,

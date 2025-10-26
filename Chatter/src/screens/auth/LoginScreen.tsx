@@ -17,15 +17,11 @@ const LoginScreen = ({ navigation }: any) => {
             Alert.alert('Invalid Number', 'Please enter a valid phone number');
             return;
         }
-        Alert.alert('Success', 'OTP will be sent');
-        navigation.replace('Otp', { phone });
 
         try {
             await axios.post('https://chatter-mobo-app.vercel.app/auth/login', { phoneNumber: phone });
-
             Alert.alert('Success', 'OTP will be sent');
-
-
+            navigation.replace('Otp', { phone });
         } catch (error) {
             console.error(error);
             Alert.alert('Error', 'Something went wrong');

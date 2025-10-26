@@ -32,7 +32,7 @@ const OtpScreen = ({ route, navigation }: { route: any, navigation: any }) => {
                 await AsyncStorage.setItem('user', JSON.stringify(response.data.data.user));
 
                 Alert.alert('Success', 'OTP verified successfully');
-                navigation.replace('EditDetails'); // Using replace to prevent going back to OTP screen
+                navigation.replace('EditDetails');
             } else {
                 Alert.alert('Error', response.data.message || 'OTP verification failed');
             }

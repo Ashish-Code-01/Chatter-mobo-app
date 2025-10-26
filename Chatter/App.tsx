@@ -22,6 +22,10 @@ export default function App() {
   useEffect(() => {
     const checkToken = async () => {
       const token = await AsyncStorage.getItem('token');
+      if (token==null) {
+        setInitialRoute('Welcome');
+        return;
+      } 
       setInitialRoute(token ? 'Home' : 'Welcome');
     };
 

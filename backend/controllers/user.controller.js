@@ -6,18 +6,60 @@ import cloudinary from "../lib/cloudinary.js";
 // login user
 export const loginUser = async (req, res) => {
     const { phoneNumber } = req.body;
-    if (!phoneNumber) {
-        return res.status(400).json({ success: false, message: "Phone number is required" });
+    
+    // Validate phone number format
+    if (!phoneNumber || !/^\d{10}$/.test(phoneNumber)) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Valid 10-digit phone number is required" 
+        });
     }
-    try {
-        const opt = Math.floor(100000 + Math.random() * 900000);
-        await User.create({ phoneNumber, otp: opt });
-        return res.status(200).json({ success: true });
-    } catch (error) {
-        console.log("Error Occuring : ", error.message);
 
+    const phone = "+91" + phoneNumber;
+
+    try {
+        // Generate 6-digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000);
+        
+        // Set OTP expiration (e.g., 10 minutes from now)
+        const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+
+        // Use findOneAndUpdate with upsert to avoid duplicate key errors
+        const user = await User.findOneAndUpdate(
+            { phoneNumber: phone },
+            { 
+                otp, 
+                otpExpiry,
+                phoneNumber: phone
+            },
+            { 
+                upsert: true,
+                new: true,
+                setDefaultsOnInsert: true,
+                runValidators: false 
+            }
+        );
+
+
+        // TODO: Send OTP via SMS service
+
+        return res.status(200).json({ 
+            success: true, 
+            message: "OTP sent successfully" 
+        });
+    } catch (error) {
+        console.error("Error in loginUser:");
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+        console.error("Full error:", error);
+        
+        return res.status(500).json({ 
+            success: false, 
+            message: "An error occurred while processing your request",
+            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
-}
+};
 
 // verify user
 export const verifyUser = async (req, res) => {
@@ -52,8 +94,6 @@ export const verifyUser = async (req, res) => {
         await user.save();
 
         const token = generateToken(user._id);
-
-        console.log(token);
 
 
         return res.status(200).json({
@@ -148,7 +188,7 @@ export const updateUser = async (req, res) => {
                 avatar
             },
             { new: true }
-        ).select('-password');
+        )
 
         return res.status(200).json({
             success: true,
