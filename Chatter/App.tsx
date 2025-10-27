@@ -14,6 +14,7 @@ import LoginScreen from './src/screens/auth/LoginScreen';
 import OTPScreen from './src/screens/auth/OtpScreen';
 import EditDetailsScreen from './src/screens/auth/EditDetails';
 import HomeScreen from './src/screens/dashbord/Home';
+import AddContact from './src/screens/dashbord/AddContact';
 
 const Stack = createNativeStackNavigator();
 export default function App() {
@@ -22,10 +23,10 @@ export default function App() {
   useEffect(() => {
     const checkToken = async () => {
       const token = await AsyncStorage.getItem('token');
-      if (token==null) {
+      if (token == null) {
         setInitialRoute('Welcome');
         return;
-      } 
+      }
       setInitialRoute(token ? 'Home' : 'Welcome');
     };
 
@@ -45,6 +46,7 @@ export default function App() {
         <Stack.Screen name="Otp" component={OTPScreen} options={{ headerShown: false }} />
         <Stack.Screen name="EditDetails" component={EditDetailsScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="AddContact" component={AddContact} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
