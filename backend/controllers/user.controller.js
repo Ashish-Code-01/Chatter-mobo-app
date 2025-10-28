@@ -6,12 +6,12 @@ import cloudinary from "../lib/cloudinary.js";
 // login user
 export const loginUser = async (req, res) => {
     const { phoneNumber } = req.body;
-    
+
     // Validate phone number format
     if (!phoneNumber || !/^\d{10}$/.test(phoneNumber)) {
-        return res.status(400).json({ 
-            success: false, 
-            message: "Valid 10-digit phone number is required" 
+        return res.status(400).json({
+            success: false,
+            message: "Valid 10-digit phone number is required"
         });
     }
 
@@ -20,41 +20,41 @@ export const loginUser = async (req, res) => {
     try {
         // Generate 6-digit OTP
         const otp = Math.floor(100000 + Math.random() * 900000);
-        
+
         // Set OTP expiration (e.g., 10 minutes from now)
         const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
         // Use findOneAndUpdate with upsert to avoid duplicate key errors
         const user = await User.findOneAndUpdate(
             { phoneNumber: phone },
-            { 
-                otp, 
+            {
+                otp,
                 otpExpiry,
                 phoneNumber: phone
             },
-            { 
+            {
                 upsert: true,
                 new: true,
                 setDefaultsOnInsert: true,
-                runValidators: false 
+                runValidators: false
             }
         );
 
 
         // TODO: Send OTP via SMS service
 
-        return res.status(200).json({ 
-            success: true, 
-            message: "OTP sent successfully" 
+        return res.status(200).json({
+            success: true,
+            message: "OTP sent successfully"
         });
     } catch (error) {
         console.error("Error in loginUser:");
         console.error("Error message:", error.message);
         console.error("Error stack:", error.stack);
         console.error("Full error:", error);
-        
-        return res.status(500).json({ 
-            success: false, 
+
+        return res.status(500).json({
+            success: false,
             message: "An error occurred while processing your request",
             error: process.env.NODE_ENV === 'development' ? error.message : undefined
         });
@@ -116,91 +116,53 @@ export const verifyUser = async (req, res) => {
 
 // update name and avatar
 export const updateUser = async (req, res) => {
-    const { name, avatar } = req.body;
-    const userId = req.user._id;
-
     try {
-        if (!name) {
+        const { name, avatar } = req.body;
+        const userId = req.user?._id;
+
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized: user not found in request",
+            });
+        }
+
+        if (!name?.trim()) {
             return res.status(400).json({
                 success: false,
                 message: "Name is required",
             });
         }
 
-        let updatedUser;
 
-        // If avatar is not provided, just update the name
-        if (!avatar) {
-            updatedUser = await User.findByIdAndUpdate(
-                userId,
-                { name },
-                { new: true }
-            ).select('-password'); // Exclude password from response
+        console.log(avatar);
 
-            return res.status(200).json({
-                success: true,
-                data: updatedUser
+
+        // 🧾 Update user in DB
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { name: name, avatar: avatar },
+            { new: true, runValidators: true }
+        );
+
+        if (!updatedUser) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found",
             });
         }
 
-        // If avatar exists and it's a base64 string or data URI, upload to Cloudinary
-        if (avatar && (avatar.startsWith('data:image') || avatar.startsWith('http') === false)) {
-            try {
-                const uploadResponse = await cloudinary.uploader.upload(avatar, {
-                    folder: "avatars",
-                    resource_type: "auto",
-                    transformation: [
-                        { width: 500, height: 500, crop: "fill", gravity: "face" },
-                        { quality: "auto" },
-                        { fetch_format: "auto" }
-                    ]
-                });
-
-                updatedUser = await User.findByIdAndUpdate(
-                    userId,
-                    {
-                        name,
-                        avatar: uploadResponse.secure_url
-                    },
-                    { new: true }
-                ).select('-password');
-
-                return res.status(200).json({
-                    success: true,
-                    data: updatedUser
-                });
-
-            } catch (cloudinaryError) {
-                console.error("Cloudinary Upload Error:", cloudinaryError);
-                return res.status(400).json({
-                    success: false,
-                    message: "Failed to upload image",
-                    error: cloudinaryError.message
-                });
-            }
-        }
-
-        // If avatar is already a URL (existing image), just update with it
-        updatedUser = await User.findByIdAndUpdate(
-            userId,
-            {
-                name,
-                avatar
-            },
-            { new: true }
-        )
-
         return res.status(200).json({
             success: true,
-            data: updatedUser
+            message: "Profile updated successfully",
+            data: updatedUser,
         });
-
     } catch (error) {
-        console.error("Server Error:", error);
+        console.error("Server Error in updateUser:", error);
         return res.status(500).json({
             success: false,
-            message: "Server Error",
-            error: error.message
+            message: "Internal Server Error",
+            error: error.message,
         });
     }
 };
