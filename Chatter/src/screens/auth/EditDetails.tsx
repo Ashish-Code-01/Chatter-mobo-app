@@ -79,7 +79,6 @@ const EditDetails = ({ navigation }: any) => {
         }
 
         const token = await AsyncStorage.getItem('token');
-        console.log('Using token:', token);
         if (!token) {
             Alert.alert('Error', 'Please login again');
             return;

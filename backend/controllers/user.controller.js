@@ -135,9 +135,6 @@ export const updateUser = async (req, res) => {
         }
 
 
-        console.log(avatar);
-
-
         // 🧾 Update user in DB
         const updatedUser = await User.findByIdAndUpdate(
             userId,
