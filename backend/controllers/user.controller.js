@@ -39,8 +39,6 @@ export const loginUser = async (req, res) => {
             }
         );
 
-
-        // TODO: Send OTP via SMS service
         sendOTP(phone, otp)
 
         return res.status(200).json({
