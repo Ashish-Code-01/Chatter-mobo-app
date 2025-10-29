@@ -1,7 +1,6 @@
 import User from "../models/user.model.js";
 import Contact from "../models/contact.model.js";
-import { generateToken } from "../lib/utils.js";
-import cloudinary from "../lib/cloudinary.js";
+import { generateToken, sendOTP } from "../lib/utils.js";
 
 // login user
 export const loginUser = async (req, res) => {
@@ -42,6 +41,7 @@ export const loginUser = async (req, res) => {
 
 
         // TODO: Send OTP via SMS service
+        sendOTP(phone, otp)
 
         return res.status(200).json({
             success: true,
@@ -65,7 +65,9 @@ export const loginUser = async (req, res) => {
 export const verifyUser = async (req, res) => {
     const { phoneNumber, otp } = req.body;
 
-    if (!phoneNumber || !otp) {
+        const phone = "+91" + phoneNumber;
+
+    if (!phone || !otp) {
         return res.status(400).json({
             success: false,
             message: "Phone number and OTP are required"
@@ -73,7 +75,7 @@ export const verifyUser = async (req, res) => {
     }
 
     try {
-        const user = await User.findOne({ phoneNumber });
+        const user = await User.findOne({ phone });
 
         if (!user) {
             return res.status(404).json({
