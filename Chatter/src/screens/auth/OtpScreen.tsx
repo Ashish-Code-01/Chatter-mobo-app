@@ -21,10 +21,13 @@ const OtpScreen = ({ route, navigation }: { route: any, navigation: any }) => {
         }
 
         try {
-            const response = await axios.post('https://chatter-mobo-app.onrender.com/auth/verify', {
-                phoneNumber: phone,
-                otp: otp,
-            });
+            const phoneNo = `+91${phone}`
+            const response = await axios.post(
+                'https://chatter-mobo-app.onrender.com/auth/verify'
+                {
+                    phoneNumber: phoneNo,
+                    otp: otp,
+                });
 
             if (response.data.success) {
                 // Save token and user data to AsyncStorage
