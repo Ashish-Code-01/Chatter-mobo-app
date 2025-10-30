@@ -61,67 +61,55 @@ export const loginUser = async (req, res) => {
 
 // verify user
 export const verifyUser = async (req, res) => {
+    const { phoneNumber, otp } = req.body;
+
+    if (!phoneNumber || !otp) {
+        return res.status(400).json({
+            success: false,
+            message: "Phone number and OTP are required"
+        });
+    }
+
     try {
-        const { phoneNumber, otp } = req.body;
+        const user = await User.findOne({ phoneNumber });
 
-        // ✅ Validate input
-        if (!phoneNumber || !otp) {
-            return res.status(400).json({
-                success: false,
-                message: "Phone number and OTP are required",
-            });
-        }
-
-        const phone = `+91${phoneNumber}`;
-
-        // ✅ Find user by phone number
-        const user = await User.findOne({ phone });
         if (!user) {
             return res.status(404).json({
                 success: false,
-                message: "User not found",
+                message: "User not found"
             });
         }
 
-        // ✅ Check if OTP matches (convert both sides to string to avoid type issues)
-        if (String(user.otp) !== String(otp)) {
+        if (user.otp !== parseInt(otp)) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid OTP",
+                message: "Invalid OTP"
             });
         }
 
-        // ✅ Update verification status
-        user.isVerified = true; // changed from `isverified` to `isVerified` (consistent camelCase)
+        user.isverified = true;
         user.otp = null;
         await user.save();
 
-        // ✅ Generate token
         const token = generateToken(user._id);
 
-        // ✅ Send response (omit sensitive fields)
+
         return res.status(200).json({
             success: true,
             data: {
-                user: {
-                    _id: user._id,
-                    name: user.name,
-                    phone: user.phone,
-                    isVerified: user.isVerified,
-                },
-                token,
-            },
+                user,
+                token
+            }
         });
     } catch (error) {
         console.error("Error in verifyUser:", error);
         return res.status(500).json({
             success: false,
-            message: "Server error",
-            error: error.message,
+            message: "Server Error",
+            error: error.message
         });
     }
-};
-
+}
 
 
 // update name and avatar
