@@ -21,9 +21,8 @@ const OtpScreen = ({ route, navigation }: { route: any, navigation: any }) => {
         }
 
         try {
-            const phoneNumber = "+91" + phone;
-            const response = await axios.post('https://chatter-mobo-app.vercel.app/auth/verify', {
-                phoneNumber,
+            const response = await axios.post('https://chatter-mobo-app.onrender.com/auth/verify', {
+                phoneNumber: phone,
                 otp: otp,
             });
 

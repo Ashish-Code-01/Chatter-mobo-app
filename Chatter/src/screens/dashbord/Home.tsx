@@ -35,7 +35,7 @@ const Home = ({ navigation }: any) => {
                 }));
 
             await axios.post(
-                'https://chatter-mobo-app.vercel.app/api/contact/sync',
+                'https://chatter-mobo-app.onrender.com/api/contact/sync',
                 { contacts: formattedContacts },
                 {
                     headers: {

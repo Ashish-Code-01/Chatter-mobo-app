@@ -19,7 +19,7 @@ const LoginScreen = ({ navigation }: any) => {
         }
 
         try {
-            await axios.post('https://chatter-mobo-app.vercel.app/auth/login', { phoneNumber: phone });
+            await axios.post('https://chatter-mobo-app.onrender.com/auth/login', { phoneNumber: phone });
             Alert.alert('Success', 'OTP will be sent');
             navigation.replace('Otp', { phone });
         } catch (error) {
