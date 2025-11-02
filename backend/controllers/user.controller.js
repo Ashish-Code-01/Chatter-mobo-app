@@ -156,11 +156,32 @@ export const updateUser = async (req, res) => {
         console.error("Server Error in updateUser:", error);
         return res.status(500).json({
             success: false,
-            message: "Internal Server Error",
-            error: error.message,
+            message: "Internal Server Error" || error.message,
         });
     }
 };
+
+
+// Get User 
+export const getuser = async (req, res) => {
+    const { phoneNumber } = req.user;
+    try {
+        const user = await User.findOne({ phoneNumber });
+
+        if (!user) return res.json({ success: false, message: "User Not Found" })
+
+        return res.json({
+            success: true,
+            user
+        })
+    } catch (error) {
+        return res.json({
+            success: false,
+            message: "Internal Server Error" || error.message,
+        })
+    }
+
+}
 
 
 // sync contacts

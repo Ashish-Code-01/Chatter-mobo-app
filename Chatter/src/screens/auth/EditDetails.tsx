@@ -94,7 +94,6 @@ const EditDetails = ({ navigation }: any) => {
 
             const response = await axios.put(
                 'https://chatter-mobo-app.onrender.com/auth/update',
-                // 'http://10.52.230.98:8000/auth/update',
                 { name: name, avatar: avatarUrl },
                 {
                     headers: { token }
@@ -105,7 +104,7 @@ const EditDetails = ({ navigation }: any) => {
                 Alert.alert('Success', 'Profile updated successfully', [
                     {
                         text: 'OK',
-                        onPress: () => navigation.goBack()
+                        onPress: () => navigation.navigate("home")
                     }
                 ]);
             } else {

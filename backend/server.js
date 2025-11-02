@@ -22,13 +22,47 @@ export const io = new Server(server, {
 
 // handle socket connection
 
+const connectedUsers = new Map(); // phoneNumber -> socket.id
+
 io.on("connection", (socket) => {
+    console.log("New client connected:", socket.id);
 
-
-    socket.on("disconnect", () => {
-        console.log("Client disconnected:", socket.id);
+    // Register user by phone number
+    socket.on("register", (phoneNumber) => {
+        if (!phoneNumber) return;
+        connectedUsers.set(phoneNumber, socket.id);
+        console.log(`User ${phoneNumber} connected`);
     });
-})
+
+    // Send message to another user
+    socket.on("sendMessage", ({ from, to, message }) => {
+        const receiverSocketId = connectedUsers.get(to);
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("receiveMessage", { from, message });
+        } else {
+            console.log(`User ${to} is offline`);
+        }
+    });
+
+    // Handle disconnect
+    socket.on("disconnect", () => {
+        const phoneNumber = getPhoneBySocket(socket.id);
+        if (phoneNumber) {
+            connectedUsers.delete(phoneNumber);
+            console.log(`User ${phoneNumber} disconnected`);
+        } else {
+            console.log("Client disconnected:", socket.id);
+        }
+    });
+});
+
+// Helper function
+function getPhoneBySocket(socketId) {
+    for (let [phone, id] of connectedUsers.entries()) {
+        if (id === socketId) return phone;
+    }
+    return null;
+}
 
 app.use(cors());
 app.use(express.json({ limit: "40mb" }));

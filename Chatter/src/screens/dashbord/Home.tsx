@@ -1,63 +1,63 @@
+import React, { useEffect } from 'react';
 import {
     StyleSheet,
     Text,
     View,
     Alert,
     Platform,
-    TouchableOpacity
+    TouchableOpacity,
+    FlatList,
 } from 'react-native';
-import React, { useEffect } from 'react';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import Contacts from 'react-native-contacts';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { io } from "socket.io-client";
 
+const sampleUsers = [
+    { id: '1', name: 'Ashish Kumar', phone: '+911111111111' },
+    { id: '2', name: 'Rohit Sharma', phone: '+912222222222' },
+    { id: '3', name: 'Sneha Patel', phone: '+913333333333' },
+    { id: '4', name: 'Neha Singh', phone: '+914444444444' },
+    { id: '5', name: 'Raj Verma', phone: '+915555555555' },
+];
 
+const MY_PHONE = '+919999999999';
 
+const socket = io("http://10.104.186.98:8000");
 
 const Home = ({ navigation }: any) => {
-
-
-    const syncContactsWithBackend = async (deviceContacts: any[]) => {
+    // ✅ Request contacts permission and sync them to backend
+    const requestPermissions = async () => {
         try {
-            const token = await AsyncStorage.getItem('token');
-            if (!token) {
-                Alert.alert('Error', 'Please login again');
-                return;
+            const permission =
+                Platform.OS === 'ios'
+                    ? PERMISSIONS.IOS.CONTACTS
+                    : PERMISSIONS.ANDROID.READ_CONTACTS;
+
+            const result = await request(permission);
+
+            if (result === RESULTS.GRANTED) {
+                console.log('Contacts permission granted');
+                await getContacts();
+            } else if (result === RESULTS.DENIED) {
+                Alert.alert(
+                    'Permission Denied',
+                    'Please enable contacts permission in settings to use this feature.'
+                );
+            } else if (result === RESULTS.BLOCKED) {
+                Alert.alert(
+                    'Permission Blocked',
+                    'Contacts permission is blocked. Enable it in device settings.'
+                );
             }
-
-            const formattedContacts = deviceContacts
-                .filter(contact => contact.phoneNumbers && contact.phoneNumbers.length > 0)
-                .map(contact => ({
-                    displayName: contact.displayName || contact.givenName || 'Unknown',
-                    phoneNumber: contact.phoneNumbers[0].number.replace(/[\s\-()]/g, ''),
-                    email: contact.emailAddresses?.[0]?.email || ''
-                }));
-
-            await axios.post(
-                'https://chatter-mobo-app.onrender.com/api/contact/sync',
-                { contacts: formattedContacts },
-                {
-                    headers: {
-                        'token': token,
-                    }
-                }
-            );
-        } catch (error: any) {
-            console.error('Sync error:', error);
-            console.error('Sync error message:', error.message);
-            console.error('Sync error details:', error.response?.data);
-
-            if (error.code === 'ECONNABORTED') {
-                Alert.alert('Error', 'Request timed out. Please check your internet connection.');
-            } else if (error.message === 'Network Error') {
-                Alert.alert('Network Error', 'Please check your internet connection and try again.');
-            } else {
-                Alert.alert('Error', 'Failed to sync contacts with server');
-            }
+        } catch (error) {
+            console.error('Permission request error:', error);
+            Alert.alert('Error', 'Failed to request contacts permission.');
         }
     };
 
+    // ✅ Get contacts from device
     const getContacts = async () => {
         try {
             const deviceContacts = await Contacts.getAll();
@@ -74,50 +74,100 @@ const Home = ({ navigation }: any) => {
         }
     };
 
-    const requestPermissions = async () => {
+    // ✅ Sync contacts with backend API
+    const syncContactsWithBackend = async (deviceContacts: any) => {
         try {
-            const permission = Platform.OS === 'ios'
-                ? PERMISSIONS.IOS.CONTACTS
-                : PERMISSIONS.ANDROID.READ_CONTACTS;
-
-            const contactsResult = await request(permission);
-
-            if (contactsResult === RESULTS.GRANTED) {
-                await getContacts();
-            } else if (contactsResult === RESULTS.DENIED) {
-                Alert.alert(
-                    'Permission Denied',
-                    'Please enable contacts permissions in settings to use this feature'
-                );
-            } else if (contactsResult === RESULTS.BLOCKED) {
-                Alert.alert(
-                    'Permission Blocked',
-                    'Contacts permission is blocked. Please enable it in your device settings.'
-                );
+            const token = await AsyncStorage.getItem('token');
+            if (!token) {
+                Alert.alert('Error', 'Please login again');
+                return;
             }
+
+            const formattedContacts = deviceContacts
+                .filter(
+                    (contact: any) =>
+                        contact.phoneNumbers && contact.phoneNumbers.length > 0
+                )
+                .map((contact: any) => ({
+                    displayName:
+                        contact.displayName || contact.givenName || 'Unknown',
+                    phoneNumber: contact.phoneNumbers[0].number.replace(
+                        /[\s\-()]/g,
+                        ''
+                    ),
+                    email: contact.emailAddresses?.[0]?.email || '',
+                }));
+
+            const response = await axios.post(
+                'https://chatter-mobo-app.onrender.com/api/contact/sync',
+                { contacts: formattedContacts },
+                {
+                    headers: {
+                        token: token,
+                    },
+                    timeout: 10000, // prevent hanging requests
+                }
+            );
+
+            console.log('Sync success:', response.data);
         } catch (error) {
-            console.error('Error requesting permissions:', error);
-            Alert.alert('Error', 'Failed to request permissions');
+            console.error('Sync error:', error);
+
+            if (error.code === 'ECONNABORTED') {
+                Alert.alert(
+                    'Timeout',
+                    'Request timed out. Check your internet connection.'
+                );
+            } else if (error.message === 'Network Error') {
+                Alert.alert(
+                    'Network Error',
+                    'Please check your internet connection and try again.'
+                );
+            } else {
+                Alert.alert('Error', 'Failed to sync contacts with server');
+            }
         }
     };
 
+
+
     useEffect(() => {
+        socket.on("connect", () => {
+            console.log("Connected to server:", socket.id);
+        });
+        socket.emit("register", MY_PHONE);
+
         requestPermissions();
     }, []);
 
-
     return (
         <View style={styles.container}>
+            {/* Header */}
             <View style={styles.header}>
-                <Text style={styles.title}>
-                    Chatter
-                </Text>
+                <Text style={styles.title}>Chatter</Text>
             </View>
 
-            <View style={styles.content}>
-                {/* contatch that the use chat will display it here  */}
-            </View>
+            {/* Contact List */}
+            <FlatList
+                data={sampleUsers}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                    <TouchableOpacity
+                        style={styles.contactCard}
+                        onPress={() =>
+                            navigation.navigate('ChatToContact', {
+                                myPhone: MY_PHONE,
+                                contactPhone: item.phone,
+                            })
+                        }
+                    >
+                        <Text style={styles.name}>{item.name}</Text>
+                        <Text style={styles.phone}>{item.phone}</Text>
+                    </TouchableOpacity>
+                )}
+            />
 
+            {/* Floating Button */}
             <TouchableOpacity
                 style={styles.floatingButton}
                 onPress={() => navigation.navigate('AddContact')}
@@ -137,9 +187,6 @@ const styles = StyleSheet.create({
     },
     header: {
         padding: 16,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         borderBottomWidth: 1,
         borderBottomColor: '#eee',
     },
@@ -147,22 +194,20 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: 'bold',
     },
-    content: {
-        flex: 1,
+    contactCard: {
+        backgroundColor: '#f8f8f8',
+        padding: 15,
+        marginHorizontal: 10,
+        marginVertical: 6,
+        borderRadius: 10,
     },
-    bottomButton: {
-        backgroundColor: '#007AFF',
-        padding: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        margin: 16,
-        borderRadius: 8,
-        marginBottom: 32,
-    },
-    buttonText: {
-        color: '#fff',
+    name: {
         fontSize: 16,
         fontWeight: '600',
+    },
+    phone: {
+        fontSize: 14,
+        color: '#666',
     },
     floatingButton: {
         position: 'absolute',
@@ -183,6 +228,6 @@ const styles = StyleSheet.create({
     floatingButtonText: {
         color: '#fff',
         fontSize: 28,
-        fontWeight: '300',
+        fontWeight: '600',
     },
 });

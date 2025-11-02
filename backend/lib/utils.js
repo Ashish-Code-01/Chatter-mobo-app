@@ -7,10 +7,9 @@ export function generateToken(userId) {
 }
 
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID; // Your Twilio Account SID
-const authToken = process.env.TWILIO_AUTH_TOKEN;   // Your Twilio Auth Token
-const twilioPhone = process.env.TWILIO_PHONE_NUMBER; // Your Twilio phone number
-
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
 const client = twilio(accountSid, authToken);
 
 export async function sendOTP(phoneNumber, otp) {

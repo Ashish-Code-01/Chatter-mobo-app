@@ -15,6 +15,7 @@ import OTPScreen from './src/screens/auth/OtpScreen';
 import EditDetailsScreen from './src/screens/auth/EditDetails';
 import HomeScreen from './src/screens/dashbord/Home';
 import AddContact from './src/screens/dashbord/AddContact';
+import ChatToContact from './src/screens/dashbord/chatToContact';
 
 const Stack = createNativeStackNavigator();
 export default function App() {
@@ -27,7 +28,7 @@ export default function App() {
         setInitialRoute('Welcome');
         return;
       }
-      setInitialRoute(token ? 'Home' : 'Welcome');
+      setInitialRoute(token ? 'home' : 'Welcome');
     };
 
     checkToken();
@@ -40,14 +41,15 @@ export default function App() {
   AddContact
   return (
     <NavigationContainer>
-      {/* <Stack.Navigator initialRouteName={"EditDetails"}> */}
-        <Stack.Navigator initialRouteName={initialRoute}>
+      <Stack.Navigator initialRouteName={"home"}>
+      {/* <Stack.Navigator initialRouteName={initialRoute}> */}
         <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Otp" component={OTPScreen} options={{ headerShown: false }} />
         <Stack.Screen name="EditDetails" component={EditDetailsScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="home" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="AddContact" component={AddContact} options={{ headerShown: false }} />
+        <Stack.Screen name="ChatToContact" component={ChatToContact} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
