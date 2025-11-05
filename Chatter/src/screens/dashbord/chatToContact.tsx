@@ -33,7 +33,6 @@ export default function App({ route }: any) {
         });
 
         socketRef.current.on("connect", () => {
-            console.log("Connected to socket:", socketRef.current.id);
             socketRef.current.emit("register", myPhone); // register user
         });
 
@@ -41,7 +40,6 @@ export default function App({ route }: any) {
         socketRef.current.on(
             "receiveMessage",
             ({ from, message }: { from: string; message: string }) => {
-                console.log("📩 Received from", from, ":", message);
                 const newMessage = {
                     from: from === myPhone ? "Me" : from,
                     message,
@@ -56,9 +54,7 @@ export default function App({ route }: any) {
             }
         );
 
-        socketRef.current.on("disconnect", () => {
-            console.log("Socket disconnected");
-        });
+        socketRef.current.on("disconnect", () => {});
 
         return () => {
             socketRef.current.disconnect();

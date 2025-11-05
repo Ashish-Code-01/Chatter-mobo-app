@@ -39,7 +39,7 @@ const Home = ({ navigation }: any) => {
             const result = await request(permission);
 
             if (result === RESULTS.GRANTED) {
-                console.log('Contacts permission granted');
+
                 await getContacts();
             } else if (result === RESULTS.DENIED) {
                 Alert.alert(
@@ -74,7 +74,6 @@ const Home = ({ navigation }: any) => {
                 // Parse the stored user JSON string
                 const parsedUser = JSON.parse(storedUser);
                 setUser(parsedUser);
-                console.log('User found in local storage:', parsedUser.phoneNumber);
             } else {
                 // Fetch user from backend
                 const response = await axios.post(
@@ -87,7 +86,6 @@ const Home = ({ navigation }: any) => {
 
                 if (response.data?.user) {
                     setUser(response.data.user);
-                    console.log('User fetched from server:', response.data.user.phoneNumber);
 
                     // Store user as JSON string
                     await AsyncStorage.setItem('User', JSON.stringify(response.data.user));
@@ -145,8 +143,6 @@ const Home = ({ navigation }: any) => {
                 { contacts: formattedContacts },
                 { headers: { token }, timeout: 10000 }
             );
-
-            console.log('Sync success:', response.data);
         } catch (error: any) {
             console.error('Sync error:', error);
 
@@ -164,9 +160,7 @@ const Home = ({ navigation }: any) => {
         getUser();
         requestPermissions();
 
-        socket.on("connect", () => {
-            console.log("Connected to server:", socket.id);
-        });
+        socket.on("connect", () => {});
 
         return () => {
             socket.disconnect();
