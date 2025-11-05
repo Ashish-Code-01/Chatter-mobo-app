@@ -1,47 +1,215 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Text, TextInput, TouchableOpacity, FlatList, View, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
+import {
+    Text,
+    TextInput,
+    TouchableOpacity,
+    FlatList,
+    View,
+    StyleSheet,
+    KeyboardAvoidingView,
+    Platform,
+    Alert,
+} from "react-native";
 import { io } from "socket.io-client";
-
-const socket = io("http://10.104.186.98:8000");
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
 
 export default function App({ route }: any) {
     const { myPhone, contactPhone } = route.params;
     const [message, setMessage] = useState("");
-    const [messages, setMessages] = useState<Array<{ from: string; message: string; timestamp: number }>>([]);
+    const [messages, setMessages] = useState<
+        Array<{ from: string; message: string; timestamp: number }>
+    >([]);
     const flatListRef = useRef<FlatList>(null);
+    const socketRef = useRef<any>(null);
 
+    const chatId = `chat_${[myPhone, contactPhone].sort().join("_")}`;
+
+    // ✅ Setup socket connection once
     useEffect(() => {
+        socketRef.current = io("https://chatter-mobo-app.onrender.com/", {
+            transports: ["websocket"],
+            reconnection: true,
+        });
 
-        socket.on("receiveMessage", ({ from, message }: { from: string; message: string }) => {
-            setMessages((prev) => [...prev, { from, message, timestamp: Date.now() }]);
+        socketRef.current.on("connect", () => {
+            console.log("Connected to socket:", socketRef.current.id);
+            socketRef.current.emit("register", myPhone); // register user
+        });
+
+        // Listen for incoming messages
+        socketRef.current.on(
+            "receiveMessage",
+            ({ from, message }: { from: string; message: string }) => {
+                console.log("📩 Received from", from, ":", message);
+                const newMessage = {
+                    from: from === myPhone ? "Me" : from,
+                    message,
+                    timestamp: Date.now(),
+                };
+
+                setMessages((prev) => {
+                    const updated = [...prev, newMessage];
+                    saveMessages(updated);
+                    return updated;
+                });
+            }
+        );
+
+        socketRef.current.on("disconnect", () => {
+            console.log("Socket disconnected");
         });
 
         return () => {
-            socket.off("receiveMessage");
+            socketRef.current.disconnect();
         };
-    }, [myPhone]);
+    }, []);
 
+    // ✅ Load local + backend messages on mount
+    useEffect(() => {
+        (async () => {
+            await loadMessages();
+            await getMessagesFromBackend();
+        })();
+    }, []);
+
+    const getMessagesFromBackend = async () => {
+        const token = await AsyncStorage.getItem("token");
+        if (!token) {
+            Alert.alert("Error", "Please login again");
+            return;
+        }
+
+        try {
+            const response = await axios.post(
+                `https://chatter-mobo-app.onrender.com/api/messages/get/${contactPhone}`,
+                {},
+                {
+                    headers: { token },
+                }
+            );
+
+            if (response.data && Array.isArray(response.data)) {
+                const fetchedMessages = response.data.map((msg: any) => ({
+                    from: msg.from === myPhone ? "Me" : msg.from,
+                    message: msg.message,
+                    timestamp: msg.timestamp || Date.now(),
+                }));
+
+                setMessages(fetchedMessages);
+                saveMessages(fetchedMessages);
+            }
+        } catch (error) {
+            console.error("❌ Error fetching messages:", error);
+        }
+    };
+
+    const loadMessages = async () => {
+        try {
+            const savedMessages = await AsyncStorage.getItem(chatId);
+            if (savedMessages) {
+                setMessages(JSON.parse(savedMessages));
+            }
+        } catch (error) {
+            console.error("❌ Error loading messages:", error);
+        }
+    };
+
+    const saveMessages = async (
+        newMessages: Array<{ from: string; message: string; timestamp: number }>
+    ) => {
+        try {
+            await AsyncStorage.setItem(chatId, JSON.stringify(newMessages));
+        } catch (error) {
+            console.error("❌ Error saving messages:", error);
+        }
+    };
+
+    // ✅ Auto-scroll when messages update
     useEffect(() => {
         if (messages.length > 0) {
-            flatListRef.current?.scrollToEnd({ animated: true });
+            setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+            }, 100);
         }
     }, [messages]);
 
-    const handleSend = () => {
+    // ✅ Send message
+    const handleSend = async () => {
         if (!contactPhone || !message.trim()) return;
-        socket.emit("sendMessage", { from: myPhone, to: contactPhone, message: message.trim() });
-        setMessages((prev) => [...prev, { from: "Me", message: message.trim(), timestamp: Date.now() }]);
+
+        const messageText = message.trim();
+        const newMessage = {
+            from: "Me",
+            message: messageText,
+            timestamp: Date.now(),
+        };
+
+        const updatedMessages = [...messages, newMessage];
+        setMessages(updatedMessages);
+        saveMessages(updatedMessages);
         setMessage("");
+
+        // Emit via socket
+        socketRef.current.emit("sendMessage", {
+            from: myPhone,
+            to: contactPhone,
+            message: messageText,
+        });
+
+        // Send to backend API
+        const token = await AsyncStorage.getItem("token");
+        if (!token) {
+            Alert.alert("Error", "Please login again");
+            return;
+        }
+
+        try {
+            await axios.post(
+                "https://chatter-mobo-app.onrender.com/api/messages/send",
+                {
+                    receiverPhoneNumber: contactPhone,
+                    message: messageText,
+                },
+                {
+                    headers: { token },
+                }
+            );
+        } catch (error) {
+            console.error("❌ Error sending message to backend:", error);
+        }
     };
 
-    const renderMessage = ({ item }: { item: { from: string; message: string; timestamp: number } }) => {
+    const renderMessage = ({
+        item,
+    }: {
+        item: { from: string; message: string; timestamp: number };
+    }) => {
         const isMe = item.from === "Me";
         return (
-            <View style={[styles.messageContainer, isMe ? styles.myMessageContainer : styles.otherMessageContainer]}>
-                <View style={[styles.messageBubble, isMe ? styles.myMessage : styles.otherMessage]}>
+            <View
+                style={[
+                    styles.messageContainer,
+                    isMe ? styles.myMessageContainer : styles.otherMessageContainer,
+                ]}
+            >
+                <View
+                    style={[
+                        styles.messageBubble,
+                        isMe ? styles.myMessage : styles.otherMessage,
+                    ]}
+                >
                     {!isMe && <Text style={styles.senderName}>{item.from}</Text>}
-                    <Text style={[styles.messageText, isMe ? styles.myMessageText : styles.otherMessageText]}>
+                    <Text
+                        style={[
+                            styles.messageText,
+                            isMe ? styles.myMessageText : styles.otherMessageText,
+                        ]}
+                    >
                         {item.message}
+                    </Text>
+                    <Text style={styles.timestamp}>
+                        {new Date(item.timestamp).toLocaleTimeString()}
                     </Text>
                 </View>
             </View>
@@ -49,8 +217,8 @@ export default function App({ route }: any) {
     };
 
     return (
-        <KeyboardAvoidingView 
-            style={styles.container} 
+        <KeyboardAvoidingView
+            style={styles.container}
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             keyboardVerticalOffset={90}
         >
@@ -60,7 +228,7 @@ export default function App({ route }: any) {
                 <Text style={styles.headerSubtitle}>Online</Text>
             </View>
 
-            {/* Messages List */}
+            {/* Messages */}
             <FlatList
                 ref={flatListRef}
                 data={messages}
@@ -70,7 +238,7 @@ export default function App({ route }: any) {
                 showsVerticalScrollIndicator={false}
             />
 
-            {/* Input Area */}
+            {/* Input */}
             <View style={styles.inputContainer}>
                 <TextInput
                     style={styles.input}
@@ -81,8 +249,11 @@ export default function App({ route }: any) {
                     multiline
                     maxLength={500}
                 />
-                <TouchableOpacity 
-                    style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]} 
+                <TouchableOpacity
+                    style={[
+                        styles.sendButton,
+                        !message.trim() && styles.sendButtonDisabled,
+                    ]}
                     onPress={handleSend}
                     disabled={!message.trim()}
                 >
@@ -93,6 +264,7 @@ export default function App({ route }: any) {
     );
 }
 
+// ✅ Styles
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -151,6 +323,12 @@ const styles = StyleSheet.create({
     messageText: {
         fontSize: 16,
         lineHeight: 20,
+    },
+    timestamp: {
+        fontSize: 10,
+        color: "#666",
+        marginTop: 4,
+        textAlign: "right",
     },
     myMessageText: {
         color: "#000",

@@ -38,7 +38,7 @@ io.on("connection", (socket) => {
     socket.on("sendMessage", ({ from, to, message }) => {
         const receiverSocketId = connectedUsers.get(to);
         if (receiverSocketId) {
-            io.to(receiverSocketId).emit("receiveMessage", { from, message });
+            io.to(receiverSocketId).emit("receiveMessage", { from, message })
         } else {
             console.log(`User ${to} is offline`);
         }

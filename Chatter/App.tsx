@@ -41,8 +41,8 @@ export default function App() {
   AddContact
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName={"home"}>
-      {/* <Stack.Navigator initialRouteName={initialRoute}> */}
+      {/* <Stack.Navigator initialRouteName={"home"}> */}
+      <Stack.Navigator initialRouteName={initialRoute}>
         <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Otp" component={OTPScreen} options={{ headerShown: false }} />

@@ -32,7 +32,7 @@ interface ContactsState {
     total: number;
 }
 
-const Home = () => {
+const Home = ({ navigation }: any) => {
     const [contacts, setContacts] = useState<ContactsState>({
         registered: [],
         unregistered: [],
@@ -181,9 +181,30 @@ const Home = () => {
         }
     };
 
+    const handleContactPress = async (contact: ContactData) => {
+        try {
+            const myPhoneNumber = await AsyncStorage.getItem('myPhoneNumber');
+            // const myPhoneNumber = "+917385971824"
+            if (!myPhoneNumber) {
+                Alert.alert('Error', 'Unable to find your phone number. Please log in again.');
+                return;
+            }
+
+            // Navigate to Chat screen with both numbers
+            navigation.navigate('ChatToContact' as never, {
+                myPhoneNumber,
+                contactPhoneNumber: contact.phoneNumber,
+            } as never);
+        } catch (error) {
+            console.error('Error navigating to chat:', error);
+            Alert.alert('Error', 'Failed to open chat');
+        }
+    };
+
     const renderContactItem = ({ item }: { item: ContactData }) => (
         <TouchableOpacity
             style={[styles.contactItem, item.isRegistered && styles.registeredContact]}
+            onPress={() => handleContactPress(item)}
         >
             <View style={styles.avatarContainer}>
                 {item.userData?.avatar ? (
