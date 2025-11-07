@@ -41,6 +41,7 @@ const Home = ({ navigation }: any) => {
     const [loading, setLoading] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [user, setUser] = useState()
 
     const fetchRegisteredContacts = async () => {
         try {
@@ -183,8 +184,9 @@ const Home = ({ navigation }: any) => {
 
     const handleContactPress = async (contact: ContactData) => {
         try {
-            const myPhoneNumber = await AsyncStorage.getItem('myPhoneNumber');
-            // const myPhoneNumber = "+917385971824"
+
+            const myPhoneNumber = AsyncStorage.getItem("MyPhone")
+
             if (!myPhoneNumber) {
                 Alert.alert('Error', 'Unable to find your phone number. Please log in again.');
                 return;
@@ -193,7 +195,7 @@ const Home = ({ navigation }: any) => {
             // Navigate to Chat screen with both numbers
             navigation.navigate('ChatToContact' as never, {
                 myPhoneNumber,
-                contactPhoneNumber: contact.phoneNumber,
+                contactPhone: contact.phoneNumber,
             } as never);
         } catch (error) {
             console.error('Error navigating to chat:', error);

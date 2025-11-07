@@ -74,6 +74,9 @@ const Home = ({ navigation }: any) => {
                 // Parse the stored user JSON string
                 const parsedUser = JSON.parse(storedUser);
                 setUser(parsedUser);
+                await AsyncStorage.setItem("MyPhone", parsedUser.phoneNumber)
+                console.log("phone number is saved ");
+
             } else {
                 // Fetch user from backend
                 const response = await axios.post(
@@ -138,7 +141,7 @@ const Home = ({ navigation }: any) => {
                     email: contact.emailAddresses?.[0]?.email || '',
                 }));
 
-            const response = await axios.post(
+            await axios.post(
                 'https://chatter-mobo-app.onrender.com/api/contact/sync',
                 { contacts: formattedContacts },
                 { headers: { token }, timeout: 10000 }
@@ -160,7 +163,7 @@ const Home = ({ navigation }: any) => {
         getUser();
         requestPermissions();
 
-        socket.on("connect", () => {});
+        socket.on("connect", () => { });
 
         return () => {
             socket.disconnect();

@@ -9,6 +9,7 @@ import {
     KeyboardAvoidingView,
     Platform,
     Alert,
+    ActivityIndicator,
 } from "react-native";
 import { io } from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -20,12 +21,13 @@ export default function App({ route }: any) {
     const [messages, setMessages] = useState<
         Array<{ from: string; message: string; timestamp: number }>
     >([]);
+    const [loading, setLoading] = useState(true);
     const flatListRef = useRef<FlatList>(null);
     const socketRef = useRef<any>(null);
 
     const chatId = `chat_${[myPhone, contactPhone].sort().join("_")}`;
 
-    // ✅ Setup socket connection once
+    // ✅ Setup socket connection
     useEffect(() => {
         socketRef.current = io("https://chatter-mobo-app.onrender.com/", {
             transports: ["websocket"],
@@ -33,10 +35,9 @@ export default function App({ route }: any) {
         });
 
         socketRef.current.on("connect", () => {
-            socketRef.current.emit("register", myPhone); // register user
+            socketRef.current.emit("register", myPhone);
         });
 
-        // Listen for incoming messages
         socketRef.current.on(
             "receiveMessage",
             ({ from, message }: { from: string; message: string }) => {
@@ -54,14 +55,16 @@ export default function App({ route }: any) {
             }
         );
 
-        socketRef.current.on("disconnect", () => {});
+        socketRef.current.on("disconnect", () => {
+            console.log("🔌 Disconnected from socket");
+        });
 
         return () => {
             socketRef.current.disconnect();
         };
     }, []);
 
-    // ✅ Load local + backend messages on mount
+    // ✅ Load local + backend messages
     useEffect(() => {
         (async () => {
             await loadMessages();
@@ -69,34 +72,44 @@ export default function App({ route }: any) {
         })();
     }, []);
 
+    // ✅ Fetch from backend (your response format)
     const getMessagesFromBackend = async () => {
-        const token = await AsyncStorage.getItem("token");
-        if (!token) {
-            Alert.alert("Error", "Please login again");
-            return;
-        }
-
         try {
+            const token = await AsyncStorage.getItem("token");
+            if (!token) {
+                Alert.alert("Error", "Please login again");
+                return;
+            }
+
             const response = await axios.post(
                 `https://chatter-mobo-app.onrender.com/api/messages/get/${contactPhone}`,
                 {},
-                {
-                    headers: { token },
-                }
+                { headers: { token } }
             );
 
-            if (response.data && Array.isArray(response.data)) {
-                const fetchedMessages = response.data.map((msg: any) => ({
-                    from: msg.from === myPhone ? "Me" : msg.from,
-                    message: msg.message,
-                    timestamp: msg.timestamp || Date.now(),
+            const data = response.data?.data; // ✅ access correct field
+
+            if (Array.isArray(data)) {
+                const fetchedMessages = data.map((msg: any) => ({
+                    from: msg.sender === myPhone ? "Me" : msg.sender,
+                    message: msg.content,
+                    timestamp: new Date(msg.createdAt).getTime(),
                 }));
 
-                setMessages(fetchedMessages);
-                saveMessages(fetchedMessages);
+                // Merge + sort
+                setMessages((prev) => {
+                    const merged = [...prev, ...fetchedMessages];
+                    const sorted = merged.sort((a, b) => a.timestamp - b.timestamp);
+                    saveMessages(sorted);
+                    return sorted;
+                });
+            } else {
+                console.warn("⚠️ Unexpected response:", response.data);
             }
         } catch (error) {
             console.error("❌ Error fetching messages:", error);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -121,7 +134,7 @@ export default function App({ route }: any) {
         }
     };
 
-    // ✅ Auto-scroll when messages update
+    // ✅ Auto-scroll
     useEffect(() => {
         if (messages.length > 0) {
             setTimeout(() => {
@@ -153,7 +166,7 @@ export default function App({ route }: any) {
             message: messageText,
         });
 
-        // Send to backend API
+        // Send to backend
         const token = await AsyncStorage.getItem("token");
         if (!token) {
             Alert.alert("Error", "Please login again");
@@ -167,9 +180,7 @@ export default function App({ route }: any) {
                     receiverPhoneNumber: contactPhone,
                     message: messageText,
                 },
-                {
-                    headers: { token },
-                }
+                { headers: { token } }
             );
         } catch (error) {
             console.error("❌ Error sending message to backend:", error);
@@ -205,7 +216,10 @@ export default function App({ route }: any) {
                         {item.message}
                     </Text>
                     <Text style={styles.timestamp}>
-                        {new Date(item.timestamp).toLocaleTimeString()}
+                        {new Date(item.timestamp).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                        })}
                     </Text>
                 </View>
             </View>
@@ -225,14 +239,22 @@ export default function App({ route }: any) {
             </View>
 
             {/* Messages */}
-            <FlatList
-                ref={flatListRef}
-                data={messages}
-                keyExtractor={(_, i) => i.toString()}
-                renderItem={renderMessage}
-                contentContainerStyle={styles.messagesList}
-                showsVerticalScrollIndicator={false}
-            />
+            {loading ? (
+                <View style={styles.loaderContainer}>
+                    <ActivityIndicator size="large" color="#075E54" />
+                    <Text style={{ marginTop: 10, color: "#555" }}>Loading messages...</Text>
+                </View>
+            ) : (
+                <FlatList
+                    ref={flatListRef}
+                    data={[...messages]}
+                    keyExtractor={(item, index) => `${item.timestamp}_${index}`}
+                    renderItem={renderMessage}
+                    extraData={messages}
+                    contentContainerStyle={styles.messagesList}
+                    showsVerticalScrollIndicator={false}
+                />
+            )}
 
             {/* Input */}
             <View style={styles.inputContainer}>
@@ -286,6 +308,11 @@ const styles = StyleSheet.create({
     messagesList: {
         padding: 16,
         paddingBottom: 8,
+    },
+    loaderContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
     },
     messageContainer: {
         marginBottom: 12,

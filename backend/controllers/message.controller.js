@@ -87,3 +87,74 @@ export const getMessagesBetweenUsers = async (req, res) => {
         });
     }
 };
+
+
+export const getMessagesForMe = async (req, res) => {
+    try {
+        const userPhoneNumber = req.user?.phoneNumber;
+        if (!userPhoneNumber) {
+            return res.status(401).json({
+                success: false,
+                error: "Unauthorized: user not found."
+            });
+        }
+
+        const messages = await Message.find({ receiver: userPhoneNumber });
+
+        return res.status(200).json({
+            success: true,
+            data: messages,
+        });
+    } catch (error) {
+        console.error("Error fetching messages:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Server error while fetching messages."
+        });
+    }
+};
+
+export const seenmsg = async (req, res) => {
+    try {
+        const userPhoneNumber = req.user?.phoneNumber;
+        const { receiverPhoneNumber } = req.body;
+
+        if (!userPhoneNumber) {
+            return res.status(401).json({
+                success: false,
+                error: "Unauthorized: user not found.",
+            });
+        }
+
+        if (!receiverPhoneNumber) {
+            return res.status(400).json({
+                success: false,
+                error: "receiverPhoneNumber is required.",
+            });
+        }
+
+        // Update all unseen messages where the logged-in user is the receiver
+        const result = await Message.updateMany(
+            {
+                sender: receiverPhoneNumber,
+                receiver: userPhoneNumber,
+                seen: false,
+            },
+            {
+                $set: { seen: true, seenAt: new Date() },
+            }
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Messages marked as seen.",
+            modifiedCount: result.modifiedCount,
+        });
+    } catch (error) {
+        console.error("Error marking messages as seen:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Server error while marking messages as seen.",
+        });
+    }
+};
