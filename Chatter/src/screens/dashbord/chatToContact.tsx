@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
     Text,
     TextInput,
@@ -8,26 +8,59 @@ import {
     StyleSheet,
     KeyboardAvoidingView,
     Platform,
-    Alert,
     ActivityIndicator,
 } from "react-native";
 import { io } from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 
-export default function App({ route }: any) {
+export default function ChatToContact({ route }: any) {
     const { myPhone, contactPhone } = route.params;
+
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState<
         Array<{ from: string; message: string; timestamp: number }>
     >([]);
     const [loading, setLoading] = useState(true);
+
     const flatListRef = useRef<FlatList>(null);
     const socketRef = useRef<any>(null);
 
     const chatId = `chat_${[myPhone, contactPhone].sort().join("_")}`;
 
-    // ✅ Setup socket connection
+    // ⭐ Prevent duplicate messages
+    const dedupeMessages = useCallback((list: any[]) => {
+        const map = new Map();
+        list.forEach((m) => {
+            const key = `${m.from}_${m.message}_${m.timestamp}`;
+            map.set(key, m);
+        });
+        return Array.from(map.values());
+    }, []);
+
+    // ✅ Mark messages as seen when opening
+    const markMessagesSeen = useCallback(async () => {
+        try {
+            const token = await AsyncStorage.getItem("token");
+            if (!token) return;
+
+            await axios.post(
+                "https://chatter-mobo-app.onrender.com/api/messages/seen",
+                { receiverPhoneNumber: contactPhone },
+                { headers: { token } }
+            );
+
+            // 👇 instantly clears unread badge in Home screen (if using socket event)
+            socketRef.current?.emit("messagesSeen", {
+                to: myPhone,
+                from: contactPhone,
+            });
+        } catch (error: any) {
+            console.log(error.message);
+        }
+    }, [contactPhone, myPhone]);
+
+    // ✅ Setup Socket
     useEffect(() => {
         socketRef.current = io("https://chatter-mobo-app.onrender.com/", {
             transports: ["websocket"],
@@ -38,184 +71,116 @@ export default function App({ route }: any) {
             socketRef.current.emit("register", myPhone);
         });
 
-        socketRef.current.on(
-            "receiveMessage",
-            ({ from, message }: { from: string; message: string }) => {
-                const newMessage = {
-                    from: from === myPhone ? "Me" : from,
-                    message,
-                    timestamp: Date.now(),
-                };
+        // Receive messages
+        socketRef.current.on("receiveMessage", ({ from, message }: { from: any, message: string }) => {
+            const newMsg = {
+                from: from === myPhone ? "Me" : from,
+                message,
+                timestamp: Date.now(),
+            };
 
-                setMessages((prev) => {
-                    const updated = [...prev, newMessage];
-                    saveMessages(updated);
-                    return updated;
-                });
-            }
-        );
-
-        socketRef.current.on("disconnect", () => {
-            console.log("🔌 Disconnected from socket");
+            setMessages((prev) => {
+                const merged = dedupeMessages([...prev, newMsg]);
+                AsyncStorage.setItem(chatId, JSON.stringify(merged));
+                return merged;
+            });
         });
 
-        return () => {
-            socketRef.current.disconnect();
-        };
-    }, []);
+        return () => socketRef.current.disconnect();
+    }, [myPhone, dedupeMessages]);
 
-    // ✅ Load local + backend messages
+    // ✅ Fetch messages on load
     useEffect(() => {
         (async () => {
-            await loadMessages();
-            await getMessagesFromBackend();
+            // Local first (for instant UI)
+            const local = await AsyncStorage.getItem(chatId);
+            if (local) setMessages(JSON.parse(local));
+
+            await fetchMessagesFromBackend();
+            await markMessagesSeen();
+            setLoading(false);
         })();
     }, []);
 
-    // ✅ Fetch from backend (your response format)
-    const getMessagesFromBackend = async () => {
+    const fetchMessagesFromBackend = async () => {
         try {
             const token = await AsyncStorage.getItem("token");
-            if (!token) {
-                Alert.alert("Error", "Please login again");
-                return;
-            }
+            if (!token) return;
 
-            const response = await axios.post(
+            const res = await axios.post(
                 `https://chatter-mobo-app.onrender.com/api/messages/get/${contactPhone}`,
                 {},
                 { headers: { token } }
             );
 
-            const data = response.data?.data; // ✅ access correct field
+            const raw = res.data?.data || [];
+            const backendMsgs = raw.map((msg: any) => ({
+                from: msg.sender === myPhone ? "Me" : msg.sender,
+                message: msg.content,
+                timestamp: new Date(msg.createdAt).getTime(),
+            }));
 
-            if (Array.isArray(data)) {
-                const fetchedMessages = data.map((msg: any) => ({
-                    from: msg.sender === myPhone ? "Me" : msg.sender,
-                    message: msg.content,
-                    timestamp: new Date(msg.createdAt).getTime(),
-                }));
-
-                // Merge + sort
-                setMessages((prev) => {
-                    const merged = [...prev, ...fetchedMessages];
-                    const sorted = merged.sort((a, b) => a.timestamp - b.timestamp);
-                    saveMessages(sorted);
-                    return sorted;
-                });
-            } else {
-                console.warn("⚠️ Unexpected response:", response.data);
-            }
-        } catch (error) {
-            console.error("❌ Error fetching messages:", error);
-        } finally {
-            setLoading(false);
+            setMessages((prev) => {
+                const merged = dedupeMessages([...prev, ...backendMsgs]).sort(
+                    (a, b) => a.timestamp - b.timestamp
+                );
+                AsyncStorage.setItem(chatId, JSON.stringify(merged));
+                return merged;
+            });
+        } catch (e) {
+            console.log("fetch err", e);
         }
     };
-
-    const loadMessages = async () => {
-        try {
-            const savedMessages = await AsyncStorage.getItem(chatId);
-            if (savedMessages) {
-                setMessages(JSON.parse(savedMessages));
-            }
-        } catch (error) {
-            console.error("❌ Error loading messages:", error);
-        }
-    };
-
-    const saveMessages = async (
-        newMessages: Array<{ from: string; message: string; timestamp: number }>
-    ) => {
-        try {
-            await AsyncStorage.setItem(chatId, JSON.stringify(newMessages));
-        } catch (error) {
-            console.error("❌ Error saving messages:", error);
-        }
-    };
-
-    // ✅ Auto-scroll
-    useEffect(() => {
-        if (messages.length > 0) {
-            setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-            }, 100);
-        }
-    }, [messages]);
 
     // ✅ Send message
     const handleSend = async () => {
-        if (!contactPhone || !message.trim()) return;
+        if (!message.trim()) return;
 
-        const messageText = message.trim();
-        const newMessage = {
-            from: "Me",
-            message: messageText,
-            timestamp: Date.now(),
-        };
+        const text = message.trim();
+        const newMsg = { from: "Me", message: text, timestamp: Date.now() };
 
-        const updatedMessages = [...messages, newMessage];
-        setMessages(updatedMessages);
-        saveMessages(updatedMessages);
         setMessage("");
+        setMessages((prev) => {
+            const updated = [...prev, newMsg];
+            AsyncStorage.setItem(chatId, JSON.stringify(updated));
+            return updated;
+        });
 
-        // Emit via socket
         socketRef.current.emit("sendMessage", {
             from: myPhone,
             to: contactPhone,
-            message: messageText,
+            message: text,
         });
 
-        // Send to backend
         const token = await AsyncStorage.getItem("token");
-        if (!token) {
-            Alert.alert("Error", "Please login again");
-            return;
-        }
-
-        try {
-            await axios.post(
+        if (token) {
+            axios.post(
                 "https://chatter-mobo-app.onrender.com/api/messages/send",
-                {
-                    receiverPhoneNumber: contactPhone,
-                    message: messageText,
-                },
+                { receiverPhoneNumber: contactPhone, message: text },
                 { headers: { token } }
             );
-        } catch (error) {
-            console.error("❌ Error sending message to backend:", error);
         }
     };
 
-    const renderMessage = ({
-        item,
-    }: {
-        item: { from: string; message: string; timestamp: number };
-    }) => {
+    // ✅ Auto scroll
+    useEffect(() => {
+        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
+    }, [messages]);
+
+    // ✅ UI
+    const renderMessage = ({ item }: any) => {
         const isMe = item.from === "Me";
         return (
             <View
                 style={[
-                    styles.messageContainer,
-                    isMe ? styles.myMessageContainer : styles.otherMessageContainer,
+                    styles.msgWrap,
+                    { alignSelf: isMe ? "flex-end" : "flex-start" },
                 ]}
             >
-                <View
-                    style={[
-                        styles.messageBubble,
-                        isMe ? styles.myMessage : styles.otherMessage,
-                    ]}
-                >
-                    {!isMe && <Text style={styles.senderName}>{item.from}</Text>}
-                    <Text
-                        style={[
-                            styles.messageText,
-                            isMe ? styles.myMessageText : styles.otherMessageText,
-                        ]}
-                    >
-                        {item.message}
-                    </Text>
-                    <Text style={styles.timestamp}>
+                <View style={[styles.bubble, isMe ? styles.mine : styles.theirs]}>
+                    {!isMe && <Text style={styles.sender}>{item.from}</Text>}
+                    <Text>{item.message}</Text>
+                    <Text style={styles.time}>
                         {new Date(item.timestamp).toLocaleTimeString([], {
                             hour: "2-digit",
                             minute: "2-digit",
@@ -229,168 +194,84 @@ export default function App({ route }: any) {
     return (
         <KeyboardAvoidingView
             style={styles.container}
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            keyboardVerticalOffset={90}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
-            {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>{contactPhone}</Text>
                 <Text style={styles.headerSubtitle}>Online</Text>
             </View>
 
-            {/* Messages */}
             {loading ? (
-                <View style={styles.loaderContainer}>
-                    <ActivityIndicator size="large" color="#075E54" />
-                    <Text style={{ marginTop: 10, color: "#555" }}>Loading messages...</Text>
-                </View>
+                <ActivityIndicator size="large" style={{ marginTop: 40 }} />
             ) : (
                 <FlatList
                     ref={flatListRef}
-                    data={[...messages]}
-                    keyExtractor={(item, index) => `${item.timestamp}_${index}`}
+                    data={messages}
+                    keyExtractor={(item, i) => `${item.timestamp}_${i}`}
                     renderItem={renderMessage}
-                    extraData={messages}
-                    contentContainerStyle={styles.messagesList}
-                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ padding: 12 }}
                 />
             )}
 
             {/* Input */}
-            <View style={styles.inputContainer}>
+            <View style={styles.inputRow}>
                 <TextInput
                     style={styles.input}
-                    placeholder="Type a message..."
-                    placeholderTextColor="#999"
+                    placeholder="Type..."
                     value={message}
                     onChangeText={setMessage}
                     multiline
-                    maxLength={500}
                 />
                 <TouchableOpacity
-                    style={[
-                        styles.sendButton,
-                        !message.trim() && styles.sendButtonDisabled,
-                    ]}
-                    onPress={handleSend}
+                    style={[styles.btn, !message.trim() && styles.btnDisabled]}
                     disabled={!message.trim()}
+                    onPress={handleSend}
                 >
-                    <Text style={styles.sendButtonText}>Send</Text>
+                    <Text style={{ color: "#fff" }}>Send</Text>
                 </TouchableOpacity>
             </View>
         </KeyboardAvoidingView>
     );
 }
 
-// ✅ Styles
+// 🎨 Styles
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: "#f5f5f5",
-    },
-    header: {
-        backgroundColor: "#075E54",
-        padding: 16,
-        paddingTop: 50,
-        borderBottomWidth: 1,
-        borderBottomColor: "#ddd",
-    },
-    headerTitle: {
-        fontSize: 18,
-        fontWeight: "bold",
-        color: "#fff",
-    },
-    headerSubtitle: {
-        fontSize: 12,
-        color: "#b3e5d8",
-        marginTop: 2,
-    },
-    messagesList: {
-        padding: 16,
-        paddingBottom: 8,
-    },
-    loaderContainer: {
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    messageContainer: {
-        marginBottom: 12,
-        maxWidth: "80%",
-    },
-    myMessageContainer: {
-        alignSelf: "flex-end",
-    },
-    otherMessageContainer: {
-        alignSelf: "flex-start",
-    },
-    messageBubble: {
+    container: { flex: 1, backgroundColor: "#f5f5f5" },
+    header: { backgroundColor: "#075E54", padding: 16, paddingTop: 50 },
+    headerTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+    headerSubtitle: { fontSize: 12, color: "#b3e5d8" },
+
+    msgWrap: { marginBottom: 10, maxWidth: "80%" },
+    bubble: {
+        padding: 10,
         borderRadius: 16,
-        padding: 12,
-        paddingHorizontal: 16,
     },
-    myMessage: {
-        backgroundColor: "#DCF8C6",
-        borderBottomRightRadius: 4,
-    },
-    otherMessage: {
-        backgroundColor: "#fff",
-        borderBottomLeftRadius: 4,
-    },
-    senderName: {
-        fontSize: 12,
-        fontWeight: "600",
-        color: "#075E54",
-        marginBottom: 4,
-    },
-    messageText: {
-        fontSize: 16,
-        lineHeight: 20,
-    },
-    timestamp: {
-        fontSize: 10,
-        color: "#666",
-        marginTop: 4,
-        textAlign: "right",
-    },
-    myMessageText: {
-        color: "#000",
-    },
-    otherMessageText: {
-        color: "#000",
-    },
-    inputContainer: {
+    mine: { backgroundColor: "#DCF8C6", borderBottomRightRadius: 4 },
+    theirs: { backgroundColor: "#fff", borderBottomLeftRadius: 4 },
+    sender: { fontSize: 12, color: "#075E54", marginBottom: 3 },
+    time: { fontSize: 10, color: "#888", marginTop: 2, textAlign: "right" },
+
+    inputRow: {
         flexDirection: "row",
-        alignItems: "flex-end",
-        padding: 12,
-        backgroundColor: "#fff",
+        padding: 10,
         borderTopWidth: 1,
-        borderTopColor: "#ddd",
+        borderColor: "#ddd",
+        backgroundColor: "#fff",
     },
     input: {
         flex: 1,
-        backgroundColor: "#f0f0f0",
-        borderRadius: 24,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        fontSize: 16,
-        maxHeight: 100,
-        marginRight: 8,
+        backgroundColor: "#eee",
+        borderRadius: 20,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        maxHeight: 110,
     },
-    sendButton: {
+    btn: {
         backgroundColor: "#075E54",
-        borderRadius: 24,
-        paddingVertical: 10,
-        paddingHorizontal: 20,
+        marginLeft: 8,
+        paddingHorizontal: 18,
+        borderRadius: 20,
         justifyContent: "center",
-        alignItems: "center",
     },
-    sendButtonDisabled: {
-        backgroundColor: "#ccc",
-    },
-    sendButtonText: {
-        color: "#fff",
-        fontSize: 16,
-        fontWeight: "600",
-    },
+    btnDisabled: { backgroundColor: "#999" },
 });

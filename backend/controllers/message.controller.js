@@ -88,6 +88,7 @@ export const getMessagesBetweenUsers = async (req, res) => {
     }
 };
 
+// controller for getting the all unseen messages of the user is logedin
 
 export const getMessagesForMe = async (req, res) => {
     try {
@@ -99,7 +100,7 @@ export const getMessagesForMe = async (req, res) => {
             });
         }
 
-        const messages = await Message.find({ receiver: userPhoneNumber });
+        const messages = await Message.find({ receiver: userPhoneNumber, seen: false });
 
         return res.status(200).json({
             success: true,
@@ -113,6 +114,8 @@ export const getMessagesForMe = async (req, res) => {
         });
     }
 };
+
+// controller for seen Messages
 
 export const seenmsg = async (req, res) => {
     try {

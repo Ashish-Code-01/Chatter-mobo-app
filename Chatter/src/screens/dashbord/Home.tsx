@@ -27,6 +27,7 @@ const socket = io("https://chatter-mobo-app.onrender.com/");
 
 const Home = ({ navigation }: any) => {
     const [user, setUser] = useState<any>(null);
+    const [unseenMessages, setUnseenMessages] = useState<any>({});
 
     // ✅ Request contacts permission
     const requestPermissions = async () => {
@@ -39,7 +40,6 @@ const Home = ({ navigation }: any) => {
             const result = await request(permission);
 
             if (result === RESULTS.GRANTED) {
-
                 await getContacts();
             } else if (result === RESULTS.DENIED) {
                 Alert.alert(
@@ -58,7 +58,7 @@ const Home = ({ navigation }: any) => {
         }
     };
 
-    // ✅ Get logged-in user from backend
+    // ✅ Get logged-in user from backend or AsyncStorage
     const getUser = async () => {
         try {
             const token = await AsyncStorage.getItem("token");
@@ -71,32 +71,24 @@ const Home = ({ navigation }: any) => {
             const storedUser = await AsyncStorage.getItem("User");
 
             if (storedUser) {
-                // Parse the stored user JSON string
                 const parsedUser = JSON.parse(storedUser);
                 setUser(parsedUser);
-                await AsyncStorage.setItem("MyPhone", parsedUser.phoneNumber)
-                console.log("phone number is saved ");
-
+                await AsyncStorage.setItem("MyPhone", parsedUser.phoneNumber);
+                if (__DEV__) console.log("Phone number saved:", parsedUser.phoneNumber);
             } else {
-                // Fetch user from backend
                 const response = await axios.post(
                     "https://chatter-mobo-app.onrender.com/auth/me",
                     {},
-                    {
-                        headers: { token },
-                    }
+                    { headers: { token } }
                 );
 
                 if (response.data?.user) {
                     setUser(response.data.user);
-
-                    // Store user as JSON string
                     await AsyncStorage.setItem('User', JSON.stringify(response.data.user));
                 } else {
                     console.warn('No user found in API response');
                 }
             }
-
         } catch (error) {
             console.error('User fetch error:', error);
             Alert.alert('Error', 'Failed to fetch user details.');
@@ -159,13 +151,63 @@ const Home = ({ navigation }: any) => {
         }
     };
 
-    useEffect(() => {
-        getUser();
-        requestPermissions();
+    // ✅ Fetch unseen messages and group by sender
+    const allUnseenMessages = async () => {
+        try {
+            const token = await AsyncStorage.getItem('token');
+            if (!token) {
+                Alert.alert('Error', 'Please login again');
+                return;
+            }
 
-        socket.on("connect", () => { });
+            const response = await axios.post(
+                "https://chatter-mobo-app.onrender.com/api/messages/get/msg/all",
+                {},
+                { headers: { token }, timeout: 10000 }
+            );
+
+            if (response.data?.success && Array.isArray(response.data.data)) {
+                const grouped: Record<string, number> = {};
+
+                response.data.data.forEach((msg: any) => {
+                    if (!msg.seen) {
+                        const sender = msg.sender;
+                        grouped[sender] = (grouped[sender] || 0) + 1;
+                    }
+                });
+
+                setUnseenMessages(grouped);
+                console.log("Unseen messages grouped:", grouped);
+            } else {
+                console.warn("Unexpected unseen message format:", response.data);
+            }
+        } catch (error) {
+            console.error("Error fetching unseen messages:", error);
+            Alert.alert("Error", "Failed to fetch unseen messages. Please try again.");
+        }
+    };
+
+    // ✅ Socket + Initialization
+    useEffect(() => {
+        const init = async () => {
+            await getUser();
+            await requestPermissions();
+            await allUnseenMessages();
+        };
+        init();
+
+        socket.on("connect", () => console.log("Socket connected"));
+
+        // Listen for incoming messages
+        socket.on("newMessage", (data: any) => {
+            setUnseenMessages((prev: any) => ({
+                ...prev,
+                [data.from]: (prev?.[data.from] || 0) + 1,
+            }));
+        });
 
         return () => {
+            socket.off("newMessage");
             socket.disconnect();
         };
     }, []);
@@ -180,20 +222,33 @@ const Home = ({ navigation }: any) => {
             <FlatList
                 data={sampleUsers}
                 keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                    <TouchableOpacity
-                        style={styles.contactCard}
-                        onPress={() =>
-                            navigation.navigate('ChatToContact', {
-                                myPhone: user?.phoneNumber || '',
-                                contactPhone: item.phone,
-                            })
-                        }
-                    >
-                        <Text style={styles.name}>{item.name}</Text>
-                        <Text style={styles.phone}>{item.phone}</Text>
-                    </TouchableOpacity>
-                )}
+                renderItem={({ item }) => {
+                    const unseen = unseenMessages?.[item.phone] || 0;
+
+                    return (
+                        <TouchableOpacity
+                            style={styles.contactCard}
+                            onPress={() =>
+                                navigation.navigate('ChatToContact', {
+                                    myPhone: user?.phoneNumber || '',
+                                    contactPhone: item.phone,
+                                })
+                            }
+                        >
+                            <View style={styles.cardRow}>
+                                <View>
+                                    <Text style={styles.name}>{item.name}</Text>
+                                    <Text style={styles.phone}>{item.phone}</Text>
+                                </View>
+                                {unseen > 0 && (
+                                    <View style={styles.badge}>
+                                        <Text style={styles.badgeText}>{unseen}</Text>
+                                    </View>
+                                )}
+                            </View>
+                        </TouchableOpacity>
+                    );
+                }}
             />
 
             <TouchableOpacity
@@ -226,6 +281,25 @@ const styles = StyleSheet.create({
     },
     name: { fontSize: 16, fontWeight: '600' },
     phone: { fontSize: 14, color: '#666' },
+    cardRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    badge: {
+        backgroundColor: 'red',
+        borderRadius: 12,
+        minWidth: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+    },
+    badgeText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
     floatingButton: {
         position: 'absolute',
         right: 20,
