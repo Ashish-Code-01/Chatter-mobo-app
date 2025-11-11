@@ -16,19 +16,17 @@ import axios from "axios";
 
 export default function ChatToContact({ route }: any) {
     const { myPhone, contactPhone } = route.params;
-
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState<
         Array<{ from: string; message: string; timestamp: number }>
     >([]);
+    const [Users, setUsers] = useState([])
     const [loading, setLoading] = useState(true);
 
     const flatListRef = useRef<FlatList>(null);
     const socketRef = useRef<any>(null);
-
     const chatId = `chat_${[myPhone, contactPhone].sort().join("_")}`;
 
-    // ⭐ Prevent duplicate messages
     const dedupeMessages = useCallback((list: any[]) => {
         const map = new Map();
         list.forEach((m) => {
@@ -38,19 +36,43 @@ export default function ChatToContact({ route }: any) {
         return Array.from(map.values());
     }, []);
 
-    // ✅ Mark messages as seen when opening
+    const saveContactToLocalStorage = async () => {
+        try {
+            // Get existing contacts
+            const res = await AsyncStorage.getItem("Users");
+            const existingUsers = res ? JSON.parse(res) : [];
+
+            // Create a new contact object
+            const contact = {
+                id: (existingUsers.length + 1).toString(),
+                name: contactPhone,
+                phone: contactPhone,
+            };
+
+            // Add new contact to list
+            const updatedUsers = [...existingUsers, contact];
+
+            // Save updated list to AsyncStorage
+            await AsyncStorage.setItem("Users", JSON.stringify(updatedUsers));
+
+            // Update React state
+            setUsers(updatedUsers);
+
+            console.log("✅ Contact saved successfully:", contact);
+        } catch (error) {
+            console.error("❌ Error saving contact:", error);
+        }
+    };
+
     const markMessagesSeen = useCallback(async () => {
         try {
             const token = await AsyncStorage.getItem("token");
             if (!token) return;
-
             await axios.post(
                 "https://chatter-mobo-app.onrender.com/api/messages/seen",
                 { receiverPhoneNumber: contactPhone },
                 { headers: { token } }
             );
-
-            // 👇 instantly clears unread badge in Home screen (if using socket event)
             socketRef.current?.emit("messagesSeen", {
                 to: myPhone,
                 from: contactPhone,
@@ -60,7 +82,6 @@ export default function ChatToContact({ route }: any) {
         }
     }, [contactPhone, myPhone]);
 
-    // ✅ Setup Socket
     useEffect(() => {
         socketRef.current = io("https://chatter-mobo-app.onrender.com/", {
             transports: ["websocket"],
@@ -71,14 +92,12 @@ export default function ChatToContact({ route }: any) {
             socketRef.current.emit("register", myPhone);
         });
 
-        // Receive messages
-        socketRef.current.on("receiveMessage", ({ from, message }: { from: any, message: string }) => {
+        socketRef.current.on("receiveMessage", ({ from, message }: { from: any; message: string }) => {
             const newMsg = {
                 from: from === myPhone ? "Me" : from,
                 message,
                 timestamp: Date.now(),
             };
-
             setMessages((prev) => {
                 const merged = dedupeMessages([...prev, newMsg]);
                 AsyncStorage.setItem(chatId, JSON.stringify(merged));
@@ -89,16 +108,14 @@ export default function ChatToContact({ route }: any) {
         return () => socketRef.current.disconnect();
     }, [myPhone, dedupeMessages]);
 
-    // ✅ Fetch messages on load
     useEffect(() => {
         (async () => {
-            // Local first (for instant UI)
             const local = await AsyncStorage.getItem(chatId);
             if (local) setMessages(JSON.parse(local));
-
+            setLoading(false);
             await fetchMessagesFromBackend();
             await markMessagesSeen();
-            setLoading(false);
+            saveContactToLocalStorage()
         })();
     }, []);
 
@@ -106,13 +123,11 @@ export default function ChatToContact({ route }: any) {
         try {
             const token = await AsyncStorage.getItem("token");
             if (!token) return;
-
             const res = await axios.post(
                 `https://chatter-mobo-app.onrender.com/api/messages/get/${contactPhone}`,
                 {},
                 { headers: { token } }
             );
-
             const raw = res.data?.data || [];
             const backendMsgs = raw.map((msg: any) => ({
                 from: msg.sender === myPhone ? "Me" : msg.sender,
@@ -132,24 +147,15 @@ export default function ChatToContact({ route }: any) {
         }
     };
 
-    // ✅ Send message
     const handleSend = async () => {
         if (!message.trim()) return;
-
         const text = message.trim();
         const newMsg = { from: "Me", message: text, timestamp: Date.now() };
-
         setMessage("");
         setMessages((prev) => {
             const updated = [...prev, newMsg];
             AsyncStorage.setItem(chatId, JSON.stringify(updated));
             return updated;
-        });
-
-        socketRef.current.emit("sendMessage", {
-            from: myPhone,
-            to: contactPhone,
-            message: text,
         });
 
         const token = await AsyncStorage.getItem("token");
@@ -162,24 +168,16 @@ export default function ChatToContact({ route }: any) {
         }
     };
 
-    // ✅ Auto scroll
     useEffect(() => {
         setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
     }, [messages]);
 
-    // ✅ UI
     const renderMessage = ({ item }: any) => {
         const isMe = item.from === "Me";
         return (
-            <View
-                style={[
-                    styles.msgWrap,
-                    { alignSelf: isMe ? "flex-end" : "flex-start" },
-                ]}
-            >
+            <View style={[styles.msgWrap, { alignSelf: isMe ? "flex-end" : "flex-start" }]}>
                 <View style={[styles.bubble, isMe ? styles.mine : styles.theirs]}>
-                    {!isMe && <Text style={styles.sender}>{item.from}</Text>}
-                    <Text>{item.message}</Text>
+                    <Text style={styles.msgText}>{item.message}</Text>
                     <Text style={styles.time}>
                         {new Date(item.timestamp).toLocaleTimeString([], {
                             hour: "2-digit",
@@ -196,13 +194,14 @@ export default function ChatToContact({ route }: any) {
             style={styles.container}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
+            <View style={styles.backgroundOverlay} />
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>{contactPhone}</Text>
-                <Text style={styles.headerSubtitle}>Online</Text>
+                {/* <Text style={styles.headerSubtitle}>Online</Text> */}
             </View>
 
             {loading ? (
-                <ActivityIndicator size="large" style={{ marginTop: 40 }} />
+                <ActivityIndicator size="large" color="#00D4C2" style={{ marginTop: 40 }} />
             ) : (
                 <FlatList
                     ref={flatListRef}
@@ -213,65 +212,114 @@ export default function ChatToContact({ route }: any) {
                 />
             )}
 
-            {/* Input */}
             <View style={styles.inputRow}>
                 <TextInput
                     style={styles.input}
-                    placeholder="Type..."
+                    placeholder="Type a message..."
+                    placeholderTextColor="#A9A9C5"
                     value={message}
                     onChangeText={setMessage}
                     multiline
                 />
                 <TouchableOpacity
-                    style={[styles.btn, !message.trim() && styles.btnDisabled]}
+                    style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
                     disabled={!message.trim()}
                     onPress={handleSend}
                 >
-                    <Text style={{ color: "#fff" }}>Send</Text>
+                    <Text style={styles.sendText}>Send</Text>
                 </TouchableOpacity>
             </View>
         </KeyboardAvoidingView>
     );
 }
 
-// 🎨 Styles
+// 🎨 Enhanced Styles
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#f5f5f5" },
-    header: { backgroundColor: "#075E54", padding: 16, paddingTop: 50 },
-    headerTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
-    headerSubtitle: { fontSize: 12, color: "#b3e5d8" },
-
-    msgWrap: { marginBottom: 10, maxWidth: "80%" },
-    bubble: {
-        padding: 10,
-        borderRadius: 16,
+    container: { flex: 1, backgroundColor: "#131537" },
+    backgroundOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: "#1E1F4B",
+        shadowColor: "#0D0F2C",
+        shadowOffset: { width: 0, height: -250 },
+        shadowOpacity: 0.8,
+        shadowRadius: 250,
+        opacity: 0.9,
     },
-    mine: { backgroundColor: "#DCF8C6", borderBottomRightRadius: 4 },
-    theirs: { backgroundColor: "#fff", borderBottomLeftRadius: 4 },
-    sender: { fontSize: 12, color: "#075E54", marginBottom: 3 },
-    time: { fontSize: 10, color: "#888", marginTop: 2, textAlign: "right" },
-
+    header: {
+        backgroundColor: "transparent",
+        padding: 18,
+        paddingTop: 55,
+        borderBottomWidth: 0.5,
+        borderBottomColor: "rgba(255,255,255,0.1)",
+    },
+    headerTitle: {
+        color: "#FFFFFF",
+        fontSize: 18,
+        fontWeight: "700",
+    },
+    headerSubtitle: {
+        fontSize: 12,
+        color: "#00D4C2",
+    },
+    msgWrap: { marginBottom: 10, maxWidth: "75%" },
+    bubble: {
+        padding: 12,
+        borderRadius: 16,
+        shadowColor: "#000",
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+        shadowOffset: { width: 0, height: 3 },
+    },
+    mine: {
+        backgroundColor: "#00D4C2",
+        borderBottomRightRadius: 4,
+    },
+    theirs: {
+        backgroundColor: "rgba(255,255,255,0.1)",
+        borderBottomLeftRadius: 4,
+    },
+    msgText: {
+        color: "#fff",
+        fontSize: 15,
+    },
+    time: {
+        fontSize: 10,
+        color: "rgba(255,255,255,0.6)",
+        marginTop: 3,
+        textAlign: "right",
+    },
     inputRow: {
         flexDirection: "row",
+        alignItems: "center",
         padding: 10,
-        borderTopWidth: 1,
-        borderColor: "#ddd",
-        backgroundColor: "#fff",
+        backgroundColor: "rgba(255,255,255,0.08)",
+        borderTopWidth: 0.5,
+        borderTopColor: "rgba(255,255,255,0.1)",
     },
     input: {
         flex: 1,
-        backgroundColor: "#eee",
-        borderRadius: 20,
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        maxHeight: 110,
+        backgroundColor: "rgba(255,255,255,0.15)",
+        borderRadius: 25,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        color: "#fff",
+        fontSize: 15,
     },
-    btn: {
-        backgroundColor: "#075E54",
-        marginLeft: 8,
+    sendButton: {
+        backgroundColor: "#00D4C2",
+        marginLeft: 10,
         paddingHorizontal: 18,
-        borderRadius: 20,
-        justifyContent: "center",
+        paddingVertical: 10,
+        borderRadius: 25,
+        shadowColor: "#00C1FF",
+        shadowOpacity: 0.4,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
     },
-    btnDisabled: { backgroundColor: "#999" },
+    sendButtonDisabled: { backgroundColor: "rgba(255,255,255,0.2)" },
+    sendText: {
+        color: "#fff",
+        fontWeight: "700",
+        fontSize: 15,
+    },
 });

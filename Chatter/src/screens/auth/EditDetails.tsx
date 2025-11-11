@@ -10,7 +10,7 @@ import {
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
-    ScrollView
+    ScrollView,
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,25 +21,21 @@ const EditDetails = ({ navigation }: any) => {
     const [avatar, setAvatar] = useState('');
     const [loading, setLoading] = useState(false);
 
-
     const handleChooseAvatar = () => {
         launchImageLibrary(
             {
                 mediaType: 'photo',
                 quality: 0.7,
                 maxWidth: 500,
-                maxHeight: 500
+                maxHeight: 500,
             },
             (response: any) => {
-                if (response.didCancel) {
-                    return;
-                } else if (response.errorCode) {
+                if (response.didCancel) return;
+                if (response.errorCode) {
                     Alert.alert('Error', response.errorMessage || 'Something went wrong');
                 } else {
                     const uri = response.assets?.[0]?.uri;
-                    if (uri) {
-                        setAvatar(uri);
-                    }
+                    if (uri) setAvatar(uri);
                 }
             }
         );
@@ -53,18 +49,13 @@ const EditDetails = ({ navigation }: any) => {
                 type: 'image/jpeg',
                 name: 'avatar.jpg',
             } as any);
-            formData.append("upload_preset", "chatter_unsigned");
+            formData.append('upload_preset', 'chatter_unsigned');
 
             const response = await axios.post(
                 'https://api.cloudinary.com/v1_1/dqmxpgv5k/image/upload',
                 formData,
-                {
-                    headers: {
-                        'Content-Type': 'multipart/form-data',
-                    },
-                }
+                { headers: { 'Content-Type': 'multipart/form-data' } }
             );
-
             return response.data.secure_url;
         } catch (error) {
             console.error('Error uploading image:', error);
@@ -94,28 +85,21 @@ const EditDetails = ({ navigation }: any) => {
 
             const response = await axios.put(
                 'https://chatter-mobo-app.onrender.com/auth/update',
-                { name: name, avatar: avatarUrl },
-                {
-                    headers: { token }
-                }
+                { name, avatar: avatarUrl },
+                { headers: { token } }
             );
 
             if (response.data.success) {
                 Alert.alert('Success', 'Profile updated successfully', [
-                    {
-                        text: 'OK',
-                        onPress: () => navigation.navigate("home")
-                    }
+                    { text: 'OK', onPress: () => navigation.navigate('home') },
                 ]);
             } else {
                 Alert.alert('Error', response.data.message || 'Failed to update profile');
             }
         } catch (error: any) {
             console.error('Error updating profile:', error);
-            console.error('Error details:', error.response?.data);
-
             if (error.message === 'Network Error') {
-                Alert.alert('Network Error', 'Please check your internet connection and try again.');
+                Alert.alert('Network Error', 'Please check your internet connection.');
             } else {
                 Alert.alert('Error', error.response?.data?.message || 'Something went wrong');
             }
@@ -124,22 +108,21 @@ const EditDetails = ({ navigation }: any) => {
         }
     };
 
-
     return (
         <KeyboardAvoidingView
             style={styles.container}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
+            {/* Background gradient simulation */}
+            <View style={styles.backgroundOverlay} />
+
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
             >
                 <Text style={styles.title}>Edit Profile</Text>
 
-                <TouchableOpacity
-                    onPress={handleChooseAvatar}
-                    activeOpacity={0.7}
-                >
+                <TouchableOpacity onPress={handleChooseAvatar} activeOpacity={0.8}>
                     {avatar ? (
                         <Image source={{ uri: avatar }} style={styles.avatar} />
                     ) : (
@@ -150,27 +133,30 @@ const EditDetails = ({ navigation }: any) => {
                     <Text style={styles.avatarHint}>Tap to change photo</Text>
                 </TouchableOpacity>
 
-                <Text style={styles.label}>Full Name</Text>
-                <TextInput
-                    value={name}
-                    onChangeText={setName}
-                    style={styles.input}
-                    placeholder="Enter your name"
-                    editable={!loading}
-                    autoCapitalize="words"
-                />
+                <View style={styles.card}>
+                    <Text style={styles.label}>Full Name</Text>
+                    <TextInput
+                        value={name}
+                        onChangeText={setName}
+                        style={styles.input}
+                        placeholder="Enter your name"
+                        placeholderTextColor="#A1A1B5"
+                        editable={!loading}
+                        autoCapitalize="words"
+                    />
 
-                <TouchableOpacity
-                    style={[styles.saveButton, loading && styles.saveButtonDisabled]}
-                    onPress={handleSave}
-                    disabled={loading}
-                >
-                    {loading ? (
-                        <ActivityIndicator color="#fff" />
-                    ) : (
-                        <Text style={styles.saveText}>Save Changes</Text>
-                    )}
-                </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.saveButton, loading && styles.saveButtonDisabled]}
+                        onPress={handleSave}
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <Text style={styles.saveText}>Save Changes</Text>
+                        )}
+                    </TouchableOpacity>
+                </View>
             </ScrollView>
         </KeyboardAvoidingView>
     );
@@ -181,86 +167,103 @@ export default EditDetails;
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: '#131537',
+    },
+    backgroundOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: '#1E1F4B',
+        shadowColor: '#0D0F2C',
+        shadowOffset: { width: 0, height: -250 },
+        shadowOpacity: 0.8,
+        shadowRadius: 250,
+        opacity: 0.9,
     },
     scrollContent: {
         padding: 20,
-    },
-    centerContent: {
-        justifyContent: 'center',
         alignItems: 'center',
     },
-    loadingText: {
-        marginTop: 10,
-        fontSize: 16,
-        color: '#666',
-    },
     title: {
-        fontSize: 22,
-        fontWeight: '700',
-        textAlign: 'center',
+        fontSize: 26,
+        fontWeight: '800',
+        color: '#FFFFFF',
         marginVertical: 20,
     },
     avatar: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
+        width: 130,
+        height: 130,
+        borderRadius: 65,
         alignSelf: 'center',
         marginBottom: 10,
         borderWidth: 3,
-        borderColor: '#007bff',
+        borderColor: '#00D4C2',
     },
     placeholderAvatar: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        backgroundColor: '#e0e0e0',
+        width: 130,
+        height: 130,
+        borderRadius: 65,
+        backgroundColor: 'rgba(255,255,255,0.1)',
         justifyContent: 'center',
         alignItems: 'center',
         alignSelf: 'center',
         marginBottom: 10,
         borderWidth: 2,
         borderStyle: 'dashed',
-        borderColor: '#999',
+        borderColor: '#00C1FF',
     },
     avatarText: {
         fontSize: 40,
-        color: '#777',
+        color: '#00C1FF',
+        fontWeight: '500',
     },
     avatarHint: {
         textAlign: 'center',
-        color: '#007bff',
+        color: '#00D4C2',
         fontSize: 14,
-        marginBottom: 30,
+        marginBottom: 25,
+    },
+    card: {
+        width: '100%',
+        backgroundColor: 'rgba(255,255,255,0.08)',
+        borderRadius: 20,
+        padding: 20,
+        shadowColor: '#000',
+        shadowOpacity: 0.3,
+        shadowRadius: 15,
+        shadowOffset: { width: 0, height: 10 },
     },
     label: {
         fontSize: 16,
         fontWeight: '600',
-        marginBottom: 6,
-        color: '#333',
+        color: '#C5C9F2',
+        marginBottom: 8,
     },
     input: {
         borderWidth: 1,
-        borderColor: '#ddd',
+        borderColor: 'rgba(255,255,255,0.2)',
         borderRadius: 10,
         padding: 12,
         fontSize: 16,
-        marginBottom: 30,
-        backgroundColor: '#f9f9f9',
+        marginBottom: 25,
+        color: '#fff',
+        backgroundColor: 'rgba(255,255,255,0.1)',
     },
     saveButton: {
-        backgroundColor: '#007bff',
+        backgroundColor: '#00D4C2',
         paddingVertical: 14,
-        borderRadius: 10,
+        borderRadius: 25,
         alignItems: 'center',
-        marginTop: 10,
+        justifyContent: 'center',
+        shadowColor: '#00C1FF',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
     },
     saveButtonDisabled: {
-        backgroundColor: '#93c5fd',
+        backgroundColor: '#5EC6B0',
     },
     saveText: {
         color: '#fff',
-        fontSize: 16,
-        fontWeight: '600',
+        fontSize: 18,
+        fontWeight: '700',
     },
 });
