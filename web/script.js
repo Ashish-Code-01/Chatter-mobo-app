@@ -98,9 +98,9 @@ if (androidDownload) {
     androidDownload.addEventListener('click', (e) => {
         e.preventDefault();
         // Replace with actual Android APK download link
-        const apkPath = 'Chatter/android/app/build/outputs/apk/release/app-release.apk';
-        alert('Android download will be available soon! For now, you can build the APK from the Android project.');
-        // window.location.href = apkPath;
+        const apkPath = './app-release.apk';
+        // alert('Android download will be available soon! For now, you can build the APK from the Android project.');
+        window.location.href = apkPath;
     });
 }
 

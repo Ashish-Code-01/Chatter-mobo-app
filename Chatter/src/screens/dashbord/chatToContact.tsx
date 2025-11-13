@@ -58,7 +58,6 @@ export default function ChatToContact({ route }: any) {
             // Update React state
             setUsers(updatedUsers);
 
-            console.log("✅ Contact saved successfully:", contact);
         } catch (error) {
             console.error("❌ Error saving contact:", error);
         }
@@ -99,6 +98,7 @@ export default function ChatToContact({ route }: any) {
                 publickey,
                 timestamp: Date.now(),
             };
+            console.log("Received message publickey:", newMsg.publickey);
             setMessages((prev) => {
                 const merged = dedupeMessages([...prev, newMsg]);
                 AsyncStorage.setItem(chatId, JSON.stringify(merged));
@@ -166,7 +166,13 @@ export default function ChatToContact({ route }: any) {
             AsyncStorage.setItem(chatId, JSON.stringify(updated));
             return updated;
         });
-        
+        socketRef.current.emit("sendMessage", {
+            from: myPhone,
+            to: contactPhone,
+            message: text,
+            Publickey,
+        });
+
         const token = await AsyncStorage.getItem("token");
         if (token) {
             axios.post(
