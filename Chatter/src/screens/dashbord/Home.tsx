@@ -49,7 +49,7 @@ const Home = ({ navigation }: any) => {
                 Alert.alert("Error", "Please login again");
                 return;
             }
-
+            
             const storedUser = await AsyncStorage.getItem("User");
             if (storedUser) {
                 const parsedUser = JSON.parse(storedUser);
@@ -83,6 +83,7 @@ const Home = ({ navigation }: any) => {
             console.error('Error loading contacts:', error);
         }
     };
+
 
     const syncContactsWithBackend = async (deviceContacts: any) => {
         try {

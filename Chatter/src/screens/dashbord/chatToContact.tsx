@@ -92,10 +92,11 @@ export default function ChatToContact({ route }: any) {
             socketRef.current.emit("register", myPhone);
         });
 
-        socketRef.current.on("receiveMessage", ({ from, message }: { from: any; message: string }) => {
+        socketRef.current.on("receiveMessage", ({ from, message, publickey }: { from: any; message: string; publickey: string }) => {
             const newMsg = {
                 from: from === myPhone ? "Me" : from,
                 message,
+                publickey,
                 timestamp: Date.now(),
             };
             setMessages((prev) => {
@@ -148,21 +149,29 @@ export default function ChatToContact({ route }: any) {
     };
 
     const handleSend = async () => {
+        // Retrieve Publickey from AsyncStorage
+        const serverkey = await AsyncStorage.getItem("serverkey");
+        const privatekey = await AsyncStorage.getItem("privatekey");
+        if (!serverkey || !privatekey) {
+            console.error("Server key or private key not found in AsyncStorage");
+            return;
+        }
+        const Publickey = serverkey + privatekey;
         if (!message.trim()) return;
         const text = message.trim();
-        const newMsg = { from: "Me", message: text, timestamp: Date.now() };
+        const newMsg = { from: "Me", message: text, timestamp: Date.now(), Publickey };
         setMessage("");
         setMessages((prev) => {
             const updated = [...prev, newMsg];
             AsyncStorage.setItem(chatId, JSON.stringify(updated));
             return updated;
         });
-
+        
         const token = await AsyncStorage.getItem("token");
         if (token) {
             axios.post(
                 "https://chatter-mobo-app.onrender.com/api/messages/send",
-                { receiverPhoneNumber: contactPhone, message: text },
+                { receiverPhoneNumber: contactPhone, message: text, Publickey },
                 { headers: { token } }
             );
         }
