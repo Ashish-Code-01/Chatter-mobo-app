@@ -62,6 +62,7 @@ const EditDetails = ({ navigation }: any) => {
             throw error;
         }
     };
+    
 
     const handleSave = async () => {
         if (!name.trim()) {

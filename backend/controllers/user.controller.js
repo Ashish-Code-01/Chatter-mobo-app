@@ -1,6 +1,6 @@
 import User from "../models/user.model.js";
 import Contact from "../models/contact.model.js";
-import { generateToken, sendOTP } from "../lib/utils.js";
+import { generateServerPublicKey, generateToken, sendOTP } from "../lib/utils.js";
 
 // login user
 export const loginUser = async (req, res) => {
@@ -92,13 +92,15 @@ export const verifyUser = async (req, res) => {
         await user.save();
 
         const token = generateToken(user._id);
+        const serverkey = generateServerPublicKey()
 
 
         return res.status(200).json({
             success: true,
             data: {
                 user,
-                token
+                token,
+                serverkey
             }
         });
     } catch (error) {

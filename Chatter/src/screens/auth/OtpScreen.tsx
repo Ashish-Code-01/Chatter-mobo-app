@@ -24,6 +24,51 @@ const OtpScreen = ({ route, navigation }: { route: any; navigation: any }) => {
         }).start();
     }, []);
 
+    const generatePrivateKey = (length = 16) => {
+        // Ensure valid length: min 1, max 16
+        length = Math.floor(Number(length)) || 16;
+        if (length < 1) length = 1;
+        if (length > 16) length = 16;
+
+        const lower = "abcdefghijklmnopqrstuvwxyz";
+        const upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const digits = "0123456789";
+        const special = "!@#$%^&*()-_=+[]{};:,.<>/?~`|";
+        const all = lower + upper + digits + special;
+
+        // Secure random integer generator
+        function randInt(max) {
+            if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+                const arr = new Uint32Array(1);
+                crypto.getRandomValues(arr);
+                return arr[0] % max;
+            } else {
+                return Math.floor(Math.random() * max);
+            }
+        }
+
+        const password = new Array(length);
+
+        // Ensure at least one special character
+        const specialPos = randInt(length);
+        password[specialPos] = special[randInt(special.length)];
+
+        // Fill the rest with random characters
+        for (let i = 0; i < length; i++) {
+            if (i === specialPos) continue;
+            password[i] = all[randInt(all.length)];
+        }
+
+        // Shuffle to avoid predictable placement
+        for (let i = password.length - 1; i > 0; i--) {
+            const j = randInt(i + 1);
+            [password[i], password[j]] = [password[j], password[i]];
+        }
+
+        return password.join("");
+    }
+
+
     const handleVerifyOtp = async () => {
         if (!otp || otp.length !== 6) {
             Alert.alert('Invalid OTP', 'Please enter a 6-digit OTP');
@@ -43,6 +88,9 @@ const OtpScreen = ({ route, navigation }: { route: any; navigation: any }) => {
             if (response.data.success) {
                 await AsyncStorage.setItem('token', response.data.data.token);
                 await AsyncStorage.setItem('user', JSON.stringify(response.data.data.user));
+                await AsyncStorage.setItem('serverkey', response.data.data.serverkey);
+                await AsyncStorage.setItem('privatekey', generatePrivateKey(16));
+                console.log(generatePrivateKey(16));
                 Alert.alert('Success', 'OTP verified successfully');
                 navigation.replace('EditDetails');
             } else {
