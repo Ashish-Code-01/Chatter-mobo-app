@@ -4,7 +4,7 @@ import { io } from "../server.js";
 // send message controller
 export const sendMessageToUser = async (req, res) => {
     try {
-        const { receiverPhoneNumber, message, Publickey } = req.body;
+        const { receiverPhoneNumber, message, publickey } = req.body;
         const senderPhoneNumber = req.user?.phoneNumber;
 
         if (!senderPhoneNumber) {
@@ -20,7 +20,7 @@ export const sendMessageToUser = async (req, res) => {
             sender: senderPhoneNumber,
             receiver: receiverPhoneNumber,
             content: message,
-            Publickey,
+            publickey,
             timestamp: new Date()
         });
 

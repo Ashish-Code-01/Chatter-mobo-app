@@ -26,22 +26,23 @@ const connectedUsers = new Map(); // phoneNumber -> socket.id
 
 io.on("connection", (socket) => {
     console.log("New client connected:", socket.id);
-
+ 
     // Register user by phone number
     socket.on("register", (phoneNumber) => {
         if (!phoneNumber) return;
-        connectedUsers.set(phoneNumber, socket.id);
+        connectedUsers.set(phoneNumber, socket.id); 
         console.log(`User ${phoneNumber} connected`);
     });
 
     // Send message to another user
-    socket.on("sendMessage", ({ from, to, message }) => {
+    socket.on("sendMessage", ({ from, to, message, publickey }) => {
+        console.log(`Message from ${from} to ${to} delivered & ${publickey}, & message: ${message}`);
         const receiverSocketId = connectedUsers.get(to);
         if (receiverSocketId) {
             io.to(receiverSocketId).emit("receiveMessage", { from, message, publickey });
         } else {
             console.log(`User ${to} is offline`);
-        }
+        } 
     });
 
     // Handle disconnect
@@ -65,7 +66,7 @@ function getPhoneBySocket(socketId) {
 }
 
 app.use(cors());
-app.use(express.json({ limit: "40mb" }));
+app.use(express.json({ limit: "10240mb" }));
 
 // Connect to Database
 connectDB();

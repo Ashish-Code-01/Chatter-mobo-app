@@ -14,7 +14,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io } from "socket.io-client";
 
-const socket = io("https://chatter-mobo-app.onrender.com/");
+// const socket = io("https://chatter-mobo-app.onrender.com/");
+const socket = io("http://10.172.241.98:8000/");
 
 const Home = ({ navigation }: any) => {
     const [user, setUser] = useState<any>(null);
@@ -49,7 +50,7 @@ const Home = ({ navigation }: any) => {
                 Alert.alert("Error", "Please login again");
                 return;
             }
-            
+
             const storedUser = await AsyncStorage.getItem("User");
             if (storedUser) {
                 const parsedUser = JSON.parse(storedUser);
@@ -149,9 +150,7 @@ const Home = ({ navigation }: any) => {
         init();
 
         socket.on("connect", () => console.log("Socket connected"));
-        return () => {
-            socket.disconnect();
-        };
+
     }, []);
 
     return (

@@ -92,7 +92,7 @@ export const verifyUser = async (req, res) => {
         await user.save();
 
         const token = generateToken(user._id);
-        const serverkey = generateServerPublicKey()
+        const serverkey = "73859718824@ChatterServerKey2025";
 
 
         return res.status(200).json({

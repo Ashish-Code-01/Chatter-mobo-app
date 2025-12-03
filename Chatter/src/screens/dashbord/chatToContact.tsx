@@ -22,6 +22,7 @@ export default function ChatToContact({ route }: any) {
     >([]);
     const [Users, setUsers] = useState([])
     const [loading, setLoading] = useState(true);
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!'_-&@#$%*()/:<>|+= ";
 
     const flatListRef = useRef<FlatList>(null);
     const socketRef = useRef<any>(null);
@@ -41,6 +42,13 @@ export default function ChatToContact({ route }: any) {
             // Get existing contacts
             const res = await AsyncStorage.getItem("Users");
             const existingUsers = res ? JSON.parse(res) : [];
+
+            // Check if contact already exists
+            const contactExists = existingUsers.some((user: any) => user.phone === contactPhone);
+            if (contactExists) {
+                setUsers(existingUsers);
+                return;
+            }
 
             // Create a new contact object
             const contact = {
@@ -71,18 +79,15 @@ export default function ChatToContact({ route }: any) {
                 "https://chatter-mobo-app.onrender.com/api/messages/seen",
                 { receiverPhoneNumber: contactPhone },
                 { headers: { token } }
-            );
-            socketRef.current?.emit("messagesSeen", {
-                to: myPhone,
-                from: contactPhone,
-            });
+            )
         } catch (error: any) {
             console.log(error.message);
         }
-    }, [contactPhone, myPhone]);
+    }, [contactPhone]);
 
     useEffect(() => {
-        socketRef.current = io("https://chatter-mobo-app.onrender.com/", {
+        // socketRef.current = io("https://chatter-mobo-app.onrender.com/", {
+        socketRef.current = io("http://10.172.241.98:8000/", {
             transports: ["websocket"],
             reconnection: true,
         });
@@ -92,13 +97,17 @@ export default function ChatToContact({ route }: any) {
         });
 
         socketRef.current.on("receiveMessage", ({ from, message, publickey }: { from: any; message: string; publickey: string }) => {
+            const decryptedMsg = decryptMessage(message, publickey);
+            console.log(`the msg ${decryptedMsg} was received from ${from} and the publickey is ${publickey}`);
+            const privatekey = AsyncStorage.getItem("privatekey");
+            const secretkey = publickey + privatekey; 
+            AsyncStorage.setItem("secretkey", secretkey);
             const newMsg = {
                 from: from === myPhone ? "Me" : from,
-                message,
+                message: decryptedMsg,
                 publickey,
                 timestamp: Date.now(),
             };
-            console.log("Received message publickey:", newMsg.publickey);
             setMessages((prev) => {
                 const merged = dedupeMessages([...prev, newMsg]);
                 AsyncStorage.setItem(chatId, JSON.stringify(merged));
@@ -107,7 +116,7 @@ export default function ChatToContact({ route }: any) {
         });
 
         return () => socketRef.current.disconnect();
-    }, [myPhone, dedupeMessages]);
+    }, [myPhone, dedupeMessages, chatId]);
 
     useEffect(() => {
         (async () => {
@@ -116,7 +125,7 @@ export default function ChatToContact({ route }: any) {
             setLoading(false);
             await fetchMessagesFromBackend();
             await markMessagesSeen();
-            saveContactToLocalStorage()
+            await saveContactToLocalStorage();
         })();
     }, []);
 
@@ -148,38 +157,108 @@ export default function ChatToContact({ route }: any) {
         }
     };
 
-    const handleSend = async () => {
-        // Retrieve Publickey from AsyncStorage
-        const serverkey = await AsyncStorage.getItem("serverkey");
-        const privatekey = await AsyncStorage.getItem("privatekey");
-        if (!serverkey || !privatekey) {
-            console.error("Server key or private key not found in AsyncStorage");
-            return;
+    // Encrypt and Decrypt Messages (Simple Caesar Cipher for Demo)
+    const encryptMessage = (text: string, key: string) => {
+        // Add null/undefined checks
+        if (!text || !key) {
+            console.error("Text or key is missing for encryption");
+            return text || "";
         }
-        const Publickey = serverkey + privatekey;
-        if (!message.trim()) return;
-        const text = message.trim();
-        const newMsg = { from: "Me", message: text, timestamp: Date.now(), Publickey };
-        setMessage("");
-        setMessages((prev) => {
-            const updated = [...prev, newMsg];
-            AsyncStorage.setItem(chatId, JSON.stringify(updated));
-            return updated;
-        });
-        socketRef.current.emit("sendMessage", {
-            from: myPhone,
-            to: contactPhone,
-            message: text,
-            Publickey,
-        });
 
-        const token = await AsyncStorage.getItem("token");
-        if (token) {
-            axios.post(
-                "https://chatter-mobo-app.onrender.com/api/messages/send",
-                { receiverPhoneNumber: contactPhone, message: text, Publickey },
-                { headers: { token } }
-            );
+        let encryptedText = "";
+
+        for (let i = 0; i < text.length; i++) {
+            const textChar = text[i];
+            const keyChar = key[i % key.length];
+
+            const textIndex = alphabet.indexOf(textChar);
+            const keyIndex = alphabet.indexOf(keyChar);
+
+            if (textIndex === -1) {
+                encryptedText += textChar; // Fixed typo: was "encryptText"
+            } else {
+                const newIndex = (textIndex + keyIndex) % alphabet.length;
+                encryptedText += alphabet[newIndex];
+            }
+        }
+
+        return encryptedText;
+    }
+
+    const decryptMessage = (encryptedText: string, key: string) => {
+        // Add null/undefined checks
+        if (!encryptedText || !key) {
+            console.error("Encrypted text or key is missing for decryption");
+            return encryptedText || "";
+        }
+
+        let decryptedText = "";
+
+        for (let i = 0; i < encryptedText.length; i++) {
+            const encryptedChar = encryptedText[i];
+            const keyChar = key[i % key.length];
+
+            const encryptedIndex = alphabet.indexOf(encryptedChar);
+            const keyIndex = alphabet.indexOf(keyChar);
+
+            if (encryptedIndex === -1) {
+                decryptedText += encryptedChar;
+            } else {
+                let newIndex = encryptedIndex - keyIndex;
+                if (newIndex < 0) newIndex += alphabet.length;
+                decryptedText += alphabet[newIndex];
+            }
+        }
+
+        return decryptedText;
+    }
+
+    const handleSend = async () => {
+        try {
+            const serverkey = await AsyncStorage.getItem("serverkey");
+            const privatekey = await AsyncStorage.getItem("privatekey");
+
+            if (!serverkey || !privatekey) {
+                console.error("Server key or private key not found in AsyncStorage");
+                return;
+            }
+
+            const publickey = serverkey + privatekey; // Consistent naming
+
+            if (!message.trim()) return;
+
+            const text = message.trim();
+            const newMsg = { from: "Me", message: text, timestamp: Date.now(), publickey };
+
+            setMessage("");
+            setMessages((prev) => {
+                const updated = [...prev, newMsg];
+                AsyncStorage.setItem(chatId, JSON.stringify(updated));
+                return updated;
+            });
+
+            const encryptmsg = encryptMessage(text, publickey);
+
+            socketRef.current.emit("sendMessage", {
+                from: myPhone,
+                to: contactPhone,
+                message: encryptmsg,
+                publickey, // Consistent naming
+            });
+
+            console.log(`the msg this ${encryptmsg} was sent to ${contactPhone} and the publickey is ${publickey}`);
+
+            const token = await AsyncStorage.getItem("token");
+            if (token) {
+                await axios.post(
+                    // "https://chatter-mobo-app.onrender.com/api/messages/send",
+                    "http://10.172.241.98:8000/api/messages/send",
+                    { receiverPhoneNumber: contactPhone, message: encryptmsg, publickey }, // Consistent naming
+                    { headers: { token } }
+                );
+            }
+        } catch (error) {
+            console.error("Error sending message:", error);
         }
     };
 
