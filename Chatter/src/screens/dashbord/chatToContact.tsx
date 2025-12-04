@@ -15,8 +15,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 
 // Configuration
-// const API_URL = "https://chatter-mobo-app.onrender.com";
-const API_URL = "http://10.172.241.98:8000"; // Uncomment for local dev
+const API_URL = "https://chatter-mobo-app.onrender.com";
+// const API_URL = "http://10.172.241.98:8000"; // Uncomment for local dev
 
 interface Message {
     from: string;
