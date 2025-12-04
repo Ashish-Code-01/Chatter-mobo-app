@@ -10,62 +10,73 @@ import {
     Platform,
     ActivityIndicator,
 } from "react-native";
-import { io } from "socket.io-client";
+import { io, Socket } from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 
-export default function ChatToContact({ route }: any) {
+// Configuration
+// const API_URL = "https://chatter-mobo-app.onrender.com";
+const API_URL = "http://10.172.241.98:8000"; // Uncomment for local dev
+
+interface Message {
+    from: string;
+    message: string;
+    timestamp: number;
+}
+
+interface RouteParams {
+    myPhone: string;
+    contactPhone: string;
+}
+
+export default function ChatToContact({ route }: { route: { params: RouteParams } }) {
     const { myPhone, contactPhone } = route.params;
     const [message, setMessage] = useState("");
-    const [messages, setMessages] = useState<
-        Array<{ from: string; message: string; timestamp: number }>
-    >([]);
-    const [Users, setUsers] = useState([])
+    const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
+    const [secretKey, setSecretKey] = useState<string>("");
+
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!'_-&@#$%*()/:<>|+= ";
 
     const flatListRef = useRef<FlatList>(null);
-    const socketRef = useRef<any>(null);
+    const socketRef = useRef<Socket | null>(null);
     const chatId = `chat_${[myPhone, contactPhone].sort().join("_")}`;
 
-    const dedupeMessages = useCallback((list: any[]) => {
+    const dedupeMessages = useCallback((list: Message[]) => {
         const map = new Map();
         list.forEach((m) => {
-            const key = `${m.from}_${m.message}_${m.timestamp}`;
-            map.set(key, m);
+            // Create a more robust key that includes message content and from field
+            // Use a small time window (1 second) to catch duplicates
+            const timeWindow = Math.floor(m.timestamp / 1000);
+            const key = `${m.from}_${m.message}_${timeWindow}`;
+
+            // Only keep the first occurrence
+            if (!map.has(key)) {
+                map.set(key, m);
+            }
         });
-        return Array.from(map.values());
+        return Array.from(map.values()) as Message[];
     }, []);
 
     const saveContactToLocalStorage = async () => {
         try {
-            // Get existing contacts
             const res = await AsyncStorage.getItem("Users");
             const existingUsers = res ? JSON.parse(res) : [];
 
-            // Check if contact already exists
             const contactExists = existingUsers.some((user: any) => user.phone === contactPhone);
-            if (contactExists) {
-                setUsers(existingUsers);
-                return;
-            }
+            if (contactExists) return;
 
-            // Create a new contact object
+            const publickey = await AsyncStorage.getItem("publickey");
+
             const contact = {
                 id: (existingUsers.length + 1).toString(),
                 name: contactPhone,
                 phone: contactPhone,
+                publickey: publickey || "",
             };
 
-            // Add new contact to list
             const updatedUsers = [...existingUsers, contact];
-
-            // Save updated list to AsyncStorage
             await AsyncStorage.setItem("Users", JSON.stringify(updatedUsers));
-
-            // Update React state
-            setUsers(updatedUsers);
-
         } catch (error) {
             console.error("❌ Error saving contact:", error);
         }
@@ -75,91 +86,42 @@ export default function ChatToContact({ route }: any) {
         try {
             const token = await AsyncStorage.getItem("token");
             if (!token) return;
+
             await axios.post(
-                "https://chatter-mobo-app.onrender.com/api/messages/seen",
+                `${API_URL}/api/messages/seen`,
                 { receiverPhoneNumber: contactPhone },
                 { headers: { token } }
-            )
+            );
         } catch (error: any) {
-            console.log(error.message);
+            console.error("Error marking messages as seen:", error.message);
         }
     }, [contactPhone]);
 
-    useEffect(() => {
-        // socketRef.current = io("https://chatter-mobo-app.onrender.com/", {
-        socketRef.current = io("http://10.172.241.98:8000/", {
-            transports: ["websocket"],
-            reconnection: true,
-        });
-
-        socketRef.current.on("connect", () => {
-            socketRef.current.emit("register", myPhone);
-        });
-
-        socketRef.current.on("receiveMessage", ({ from, message, publickey }: { from: any; message: string; publickey: string }) => {
-            const decryptedMsg = decryptMessage(message, publickey);
-            console.log(`the msg ${decryptedMsg} was received from ${from} and the publickey is ${publickey}`);
-            const privatekey = AsyncStorage.getItem("privatekey");
-            const secretkey = publickey + privatekey; 
-            AsyncStorage.setItem("secretkey", secretkey);
-            const newMsg = {
-                from: from === myPhone ? "Me" : from,
-                message: decryptedMsg,
-                publickey,
-                timestamp: Date.now(),
-            };
-            setMessages((prev) => {
-                const merged = dedupeMessages([...prev, newMsg]);
-                AsyncStorage.setItem(chatId, JSON.stringify(merged));
-                return merged;
-            });
-        });
-
-        return () => socketRef.current.disconnect();
-    }, [myPhone, dedupeMessages, chatId]);
-
-    useEffect(() => {
-        (async () => {
-            const local = await AsyncStorage.getItem(chatId);
-            if (local) setMessages(JSON.parse(local));
-            setLoading(false);
-            await fetchMessagesFromBackend();
-            await markMessagesSeen();
-            await saveContactToLocalStorage();
-        })();
-    }, []);
-
-    const fetchMessagesFromBackend = async () => {
+    // Initialize encryption key
+    const initializeSecretKey = async () => {
         try {
-            const token = await AsyncStorage.getItem("token");
-            if (!token) return;
-            const res = await axios.post(
-                `https://chatter-mobo-app.onrender.com/api/messages/get/${contactPhone}`,
-                {},
-                { headers: { token } }
-            );
-            const raw = res.data?.data || [];
-            const backendMsgs = raw.map((msg: any) => ({
-                from: msg.sender === myPhone ? "Me" : msg.sender,
-                message: msg.content,
-                timestamp: new Date(msg.createdAt).getTime(),
-            }));
+            let key = await AsyncStorage.getItem("secretkey");
 
-            setMessages((prev) => {
-                const merged = dedupeMessages([...prev, ...backendMsgs]).sort(
-                    (a, b) => a.timestamp - b.timestamp
-                );
-                AsyncStorage.setItem(chatId, JSON.stringify(merged));
-                return merged;
-            });
-        } catch (e) {
-            console.log("fetch err", e);
+            if (!key) {
+                const privatekey = await AsyncStorage.getItem("privatekey");
+                const serverkey = await AsyncStorage.getItem("serverkey");
+
+                if (privatekey && serverkey) {
+                    key = privatekey + serverkey;
+                    await AsyncStorage.setItem("secretkey", key);
+                }
+            }
+
+            if (key) {
+                setSecretKey(key);
+            }
+        } catch (error) {
+            console.error("Error initializing secret key:", error);
         }
     };
 
-    // Encrypt and Decrypt Messages (Simple Caesar Cipher for Demo)
-    const encryptMessage = (text: string, key: string) => {
-        // Add null/undefined checks
+    // Encrypt Message
+    const encryptMessage = (text: string, key: string): string => {
         if (!text || !key) {
             console.error("Text or key is missing for encryption");
             return text || "";
@@ -175,7 +137,7 @@ export default function ChatToContact({ route }: any) {
             const keyIndex = alphabet.indexOf(keyChar);
 
             if (textIndex === -1) {
-                encryptedText += textChar; // Fixed typo: was "encryptText"
+                encryptedText += textChar;
             } else {
                 const newIndex = (textIndex + keyIndex) % alphabet.length;
                 encryptedText += alphabet[newIndex];
@@ -183,10 +145,10 @@ export default function ChatToContact({ route }: any) {
         }
 
         return encryptedText;
-    }
+    };
 
-    const decryptMessage = (encryptedText: string, key: string) => {
-        // Add null/undefined checks
+    // Decrypt Message
+    const decryptMessage = (encryptedText: string, key: string): string => {
         if (!encryptedText || !key) {
             console.error("Encrypted text or key is missing for decryption");
             return encryptedText || "";
@@ -211,25 +173,148 @@ export default function ChatToContact({ route }: any) {
         }
 
         return decryptedText;
-    }
+    };
+
+    // Setup Socket
+    useEffect(() => {
+        socketRef.current = io(API_URL, {
+            transports: ["websocket"],
+            reconnection: true,
+        });
+
+        socketRef.current.on("connect", () => {
+            console.log("Socket connected");
+            socketRef.current?.emit("register", myPhone);
+        });
+
+        socketRef.current.on("receiveMessage", async ({ from, message: encryptedMsg, publickey }: { from: string; message: string; publickey: string }) => {
+            try {
+                // Only process messages from the contact, not from ourselves
+                if (from === myPhone) {
+                    return; // Skip our own messages from socket
+                }
+
+                // Use the stored secret key or the provided public key
+                const keyToUse = secretKey || publickey;
+                const decryptedMsg = decryptMessage(encryptedMsg, keyToUse);
+
+                // Store the public key if we received a new one
+                if (publickey && !secretKey) {
+                    const privatekey = await AsyncStorage.getItem("privatekey");
+                    if (privatekey) {
+                        const fullKey = publickey + privatekey;
+                        await AsyncStorage.setItem("secretkey", fullKey);
+                        setSecretKey(fullKey);
+                    }
+                }
+
+                const newMsg: Message = {
+                    from: from,
+                    message: decryptedMsg,
+                    timestamp: Date.now(),
+                };
+
+                setMessages((prev) => {
+                    const merged = dedupeMessages([...prev, newMsg]);
+                    AsyncStorage.setItem(chatId, JSON.stringify(merged));
+                    return merged;
+                });
+            } catch (error) {
+                console.error("Error receiving message:", error);
+            }
+        });
+
+        socketRef.current.on("connect_error", (error) => {
+            console.error("Socket connection error:", error);
+        });
+
+        return () => {
+            socketRef.current?.disconnect();
+        };
+    }, [myPhone, secretKey, dedupeMessages, chatId]);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                await initializeSecretKey();
+
+                const local = await AsyncStorage.getItem(chatId);
+                if (local) {
+                    setMessages(JSON.parse(local));
+                }
+
+                await fetchMessagesFromBackend();
+                await markMessagesSeen();
+                await saveContactToLocalStorage();
+            } catch (error) {
+                console.error("Error during initial load:", error);
+            } finally {
+                setLoading(false);
+            }
+        })();
+    }, []);
+
+    const fetchMessagesFromBackend = async () => {
+        try {
+            const token = await AsyncStorage.getItem("token");
+            if (!token) return;
+
+            const res = await axios.post(
+                `${API_URL}/api/messages/get/${contactPhone}`,
+                {},
+                { headers: { token } }
+            );
+
+            const raw = res.data?.data || [];
+            const backendMsgs: Message[] = raw.map((msg: any) => ({
+                from: msg.sender === myPhone ? "Me" : msg.sender,
+                message: msg.content,
+                timestamp: new Date(msg.createdAt).getTime(),
+            }));
+
+            setMessages((prev) => {
+                const merged = dedupeMessages([...prev, ...backendMsgs]).sort(
+                    (a, b) => a.timestamp - b.timestamp
+                );
+                AsyncStorage.setItem(chatId, JSON.stringify(merged));
+                return merged;
+            });
+        } catch (error) {
+            console.error("Error fetching messages:", error);
+        }
+    };
 
     const handleSend = async () => {
         try {
-            const serverkey = await AsyncStorage.getItem("serverkey");
-            const privatekey = await AsyncStorage.getItem("privatekey");
-
-            if (!serverkey || !privatekey) {
-                console.error("Server key or private key not found in AsyncStorage");
-                return;
-            }
-
-            const publickey = serverkey + privatekey; // Consistent naming
-
             if (!message.trim()) return;
 
-            const text = message.trim();
-            const newMsg = { from: "Me", message: text, timestamp: Date.now(), publickey };
+            // Use the stored secret key
+            let keyToUse = secretKey;
 
+            // Fallback if secret key not available
+            if (!keyToUse) {
+                const privatekey = await AsyncStorage.getItem("privatekey");
+                const serverkey = await AsyncStorage.getItem("serverkey");
+
+                if (!privatekey || !serverkey) {
+                    console.error("Encryption keys not found. Please login again.");
+                    return;
+                }
+
+                keyToUse = privatekey + serverkey;
+                await AsyncStorage.setItem("secretkey", keyToUse);
+                setSecretKey(keyToUse);
+            }
+
+            const text = message.trim();
+            const timestamp = Date.now();
+            const newMsg: Message = {
+                from: "Me",
+                message: text,
+                timestamp: timestamp,
+            };
+
+            // Clear input and update UI immediately
             setMessage("");
             setMessages((prev) => {
                 const updated = [...prev, newMsg];
@@ -237,23 +322,27 @@ export default function ChatToContact({ route }: any) {
                 return updated;
             });
 
-            const encryptmsg = encryptMessage(text, publickey);
+            // Encrypt and send
+            const encryptedMsg = encryptMessage(text, keyToUse);
 
-            socketRef.current.emit("sendMessage", {
+            // Send via socket (don't emit back to ourselves)
+            socketRef.current?.emit("sendMessage", {
                 from: myPhone,
                 to: contactPhone,
-                message: encryptmsg,
-                publickey, // Consistent naming
+                message: encryptedMsg,
+                publickey: keyToUse,
             });
 
-            console.log(`the msg this ${encryptmsg} was sent to ${contactPhone} and the publickey is ${publickey}`);
-
+            // Save to backend
             const token = await AsyncStorage.getItem("token");
             if (token) {
                 await axios.post(
-                    // "https://chatter-mobo-app.onrender.com/api/messages/send",
-                    "http://10.172.241.98:8000/api/messages/send",
-                    { receiverPhoneNumber: contactPhone, message: encryptmsg, publickey }, // Consistent naming
+                    `${API_URL}/api/messages/send`,
+                    {
+                        receiverPhoneNumber: contactPhone,
+                        message: encryptedMsg,
+                        publickey: keyToUse,
+                    },
                     { headers: { token } }
                 );
             }
@@ -262,11 +351,15 @@ export default function ChatToContact({ route }: any) {
         }
     };
 
+    // Auto-scroll to bottom
     useEffect(() => {
-        setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 80);
+        const timer = setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+        return () => clearTimeout(timer);
     }, [messages]);
 
-    const renderMessage = ({ item }: any) => {
+    const renderMessage = ({ item }: { item: Message }) => {
         const isMe = item.from === "Me";
         return (
             <View style={[styles.msgWrap, { alignSelf: isMe ? "flex-end" : "flex-start" }]}>
@@ -287,22 +380,25 @@ export default function ChatToContact({ route }: any) {
         <KeyboardAvoidingView
             style={styles.container}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
         >
             <View style={styles.backgroundOverlay} />
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>{contactPhone}</Text>
-                {/* <Text style={styles.headerSubtitle}>Online</Text> */}
             </View>
 
             {loading ? (
-                <ActivityIndicator size="large" color="#00D4C2" style={{ marginTop: 40 }} />
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#00D4C2" />
+                </View>
             ) : (
                 <FlatList
                     ref={flatListRef}
                     data={messages}
                     keyExtractor={(item, i) => `${item.timestamp}_${i}`}
                     renderItem={renderMessage}
-                    contentContainerStyle={{ padding: 12 }}
+                    contentContainerStyle={styles.messageList}
+                    onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
                 />
             )}
 
@@ -314,6 +410,7 @@ export default function ChatToContact({ route }: any) {
                     value={message}
                     onChangeText={setMessage}
                     multiline
+                    maxLength={1000}
                 />
                 <TouchableOpacity
                     style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
@@ -327,9 +424,11 @@ export default function ChatToContact({ route }: any) {
     );
 }
 
-// 🎨 Enhanced Styles
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: "#131537" },
+    container: {
+        flex: 1,
+        backgroundColor: "#131537",
+    },
     backgroundOverlay: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: "#1E1F4B",
@@ -351,11 +450,19 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: "700",
     },
-    headerSubtitle: {
-        fontSize: 12,
-        color: "#00D4C2",
+    loadingContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
     },
-    msgWrap: { marginBottom: 10, maxWidth: "75%" },
+    messageList: {
+        padding: 12,
+        flexGrow: 1,
+    },
+    msgWrap: {
+        marginBottom: 10,
+        maxWidth: "75%",
+    },
     bubble: {
         padding: 12,
         borderRadius: 16,
@@ -375,6 +482,7 @@ const styles = StyleSheet.create({
     msgText: {
         color: "#fff",
         fontSize: 15,
+        lineHeight: 20,
     },
     time: {
         fontSize: 10,
@@ -398,6 +506,7 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         color: "#fff",
         fontSize: 15,
+        maxHeight: 100,
     },
     sendButton: {
         backgroundColor: "#00D4C2",
@@ -410,7 +519,9 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 4 },
     },
-    sendButtonDisabled: { backgroundColor: "rgba(255,255,255,0.2)" },
+    sendButtonDisabled: {
+        backgroundColor: "rgba(255,255,255,0.2)",
+    },
     sendText: {
         color: "#fff",
         fontWeight: "700",

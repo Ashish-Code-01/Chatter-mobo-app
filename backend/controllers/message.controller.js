@@ -20,7 +20,7 @@ export const sendMessageToUser = async (req, res) => {
             sender: senderPhoneNumber,
             receiver: receiverPhoneNumber,
             content: message,
-            publickey,
+            Publickey: publickey,
             timestamp: new Date()
         });
 
@@ -40,7 +40,7 @@ export const sendMessageToUser = async (req, res) => {
     }
 };
 
-
+ 
 // get message controller
 
 export const getMessagesBetweenUsers = async (req, res) => {
