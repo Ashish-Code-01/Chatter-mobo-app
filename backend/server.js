@@ -6,6 +6,7 @@ import connectDB from "./lib/dbconnect.js";
 import userRoute from "./routes/user.route.js";
 import contactRoute from "./routes/contact.route.js";
 import messageRoute from "./routes/message.route.js";
+import Message from "./models/message.model.js";
 import { Server } from "socket.io";
 
 
@@ -26,11 +27,11 @@ const connectedUsers = new Map(); // phoneNumber -> socket.id
 
 io.on("connection", (socket) => {
     console.log("New client connected:", socket.id);
- 
+
     // Register user by phone number
     socket.on("register", (phoneNumber) => {
         if (!phoneNumber) return;
-        connectedUsers.set(phoneNumber, socket.id); 
+        connectedUsers.set(phoneNumber, socket.id);
         console.log(`User ${phoneNumber} connected`);
     });
 
@@ -41,8 +42,15 @@ io.on("connection", (socket) => {
         if (receiverSocketId) {
             io.to(receiverSocketId).emit("receiveMessage", { from, message, publickey });
         } else {
-            console.log(`User ${to} is offline`);
-        } 
+            console.log(`from :${from}`);
+            Message.create({
+                sender: from,
+                receiver: to,
+                content: message,
+                Publickey: publickey,
+                timestamp: new Date()
+            });
+        }
     });
 
     // Handle disconnect

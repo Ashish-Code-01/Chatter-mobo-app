@@ -266,11 +266,14 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
             );
 
             const raw = res.data?.data || [];
+            console.log(raw);
+
             const backendMsgs: Message[] = raw.map((msg: any) => ({
                 from: msg.sender === myPhone ? "Me" : msg.sender,
-                message: msg.content,
+                message: decryptMessage(msg.content, msg.Publickey),
                 timestamp: new Date(msg.createdAt).getTime(),
             }));
+
 
             setMessages((prev) => {
                 const merged = dedupeMessages([...prev, ...backendMsgs]).sort(
@@ -332,20 +335,6 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
                 message: encryptedMsg,
                 publickey: keyToUse,
             });
-
-            // Save to backend
-            const token = await AsyncStorage.getItem("token");
-            if (token) {
-                await axios.post(
-                    `${API_URL}/api/messages/send`,
-                    {
-                        receiverPhoneNumber: contactPhone,
-                        message: encryptedMsg,
-                        publickey: keyToUse,
-                    },
-                    { headers: { token } }
-                );
-            }
         } catch (error) {
             console.error("Error sending message:", error);
         }

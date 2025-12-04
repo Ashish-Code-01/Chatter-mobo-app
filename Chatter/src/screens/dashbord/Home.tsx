@@ -141,16 +141,11 @@ const Home = ({ navigation }: any) => {
 
 
     useEffect(() => {
-        const init = async () => {
-            await getUser();
-            getUsersContact()
-            await requestPermissions();
-            await allUnseenMessages();
-        };
-        init();
-
-        socket.on("connect", () => console.log("Socket connected"));
-
+        getUser();
+        getUsersContact()
+        requestPermissions();
+        allUnseenMessages();
+        socket.on("connect", () => { });
     }, []);
 
     return (
