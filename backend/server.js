@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import http from "http";
+// import morgan from "morgan"; // for development mode only
 import connectDB from "./lib/dbconnect.js";
 import userRoute from "./routes/user.route.js";
 import contactRoute from "./routes/contact.route.js";
@@ -72,6 +73,9 @@ function getPhoneBySocket(socketId) {
     }
     return null;
 }
+
+// app.use(morgan('dev')); //for development mode only
+
 
 app.use(cors());
 app.use(express.json({ limit: "10240mb" }));

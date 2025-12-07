@@ -16,6 +16,7 @@ import EditDetailsScreen from './src/screens/auth/EditDetails';
 import HomeScreen from './src/screens/dashbord/Home';
 import AddContact from './src/screens/dashbord/AddContact';
 import ChatToContact from './src/screens/dashbord/chatToContact';
+import updateUserDetails from './src/screens/update/updateUserDetails'
 
 const Stack = createNativeStackNavigator();
 export default function App() {
@@ -41,8 +42,8 @@ export default function App() {
   AddContact
   return (
     <NavigationContainer>
-      {/* <Stack.Navigator initialRouteName={"home"}> */}
-      <Stack.Navigator initialRouteName={initialRoute}>
+      {/* <Stack.Navigator initialRouteName={"updateUserDetails"}> */}
+        <Stack.Navigator initialRouteName={initialRoute}>
         <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Otp" component={OTPScreen} options={{ headerShown: false }} />
@@ -50,6 +51,7 @@ export default function App() {
         <Stack.Screen name="home" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="AddContact" component={AddContact} options={{ headerShown: false }} />
         <Stack.Screen name="ChatToContact" component={ChatToContact} options={{ headerShown: false }} />
+        <Stack.Screen name="updateUserDetails" component={updateUserDetails} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

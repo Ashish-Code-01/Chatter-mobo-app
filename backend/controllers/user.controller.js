@@ -117,7 +117,7 @@ export const verifyUser = async (req, res) => {
 // update name and avatar
 export const updateUser = async (req, res) => {
     try {
-        const { name, avatar } = req.body;
+        const { name, avatar, bio } = req.body;
         const userId = req.user?._id;
 
         if (!userId) {
@@ -138,7 +138,7 @@ export const updateUser = async (req, res) => {
         // 🧾 Update user in DB
         const updatedUser = await User.findByIdAndUpdate(
             userId,
-            { name: name, avatar: avatar },
+            { name: name, avatar: avatar, bio: bio },
             { new: true, runValidators: true }
         );
 

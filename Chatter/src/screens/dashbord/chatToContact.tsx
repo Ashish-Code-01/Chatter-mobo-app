@@ -66,13 +66,13 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
             const contactExists = existingUsers.some((user: any) => user.phone === contactPhone);
             if (contactExists) return;
 
-            const publickey = await AsyncStorage.getItem("publickey");
+            const secretkey = await AsyncStorage.getItem("secretkey");
 
             const contact = {
                 id: (existingUsers.length + 1).toString(),
                 name: contactPhone,
                 phone: contactPhone,
-                publickey: publickey || "",
+                publickey: secretkey || "",
             };
 
             const updatedUsers = [...existingUsers, contact];
@@ -115,6 +115,7 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
             if (key) {
                 setSecretKey(key);
             }
+
         } catch (error) {
             console.error("Error initializing secret key:", error);
         }
@@ -267,10 +268,11 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
 
             const raw = res.data?.data || [];
             console.log(raw);
+            const secretkey = await AsyncStorage.getItem("secretkey");
 
             const backendMsgs: Message[] = raw.map((msg: any) => ({
                 from: msg.sender === myPhone ? "Me" : msg.sender,
-                message: decryptMessage(msg.content, msg.Publickey),
+                message: decryptMessage(msg.content, msg.Publickey || secretkey),
                 timestamp: new Date(msg.createdAt).getTime(),
             }));
 
@@ -293,6 +295,7 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
 
             // Use the stored secret key
             let keyToUse = secretKey;
+
 
             // Fallback if secret key not available
             if (!keyToUse) {
@@ -329,12 +332,23 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
             const encryptedMsg = encryptMessage(text, keyToUse);
 
             // Send via socket (don't emit back to ourselves)
-            socketRef.current?.emit("sendMessage", {
-                from: myPhone,
-                to: contactPhone,
-                message: encryptedMsg,
-                publickey: keyToUse,
-            });
+            if (keyToUse.length === 64) {
+                socketRef.current?.emit("sendMessage", {
+                    from: myPhone,
+                    to: contactPhone,
+                    message: encryptedMsg,
+                    publickey: "",
+                });
+            }
+            else {
+                socketRef.current?.emit("sendMessage", {
+                    from: myPhone,
+                    to: contactPhone,
+                    message: encryptedMsg,
+                    publickey: keyToUse,
+                });
+            }
+
         } catch (error) {
             console.error("Error sending message:", error);
         }
@@ -412,12 +426,12 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
         </KeyboardAvoidingView>
     );
 }
-
 const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: "#131537",
     },
+
     backgroundOverlay: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: "#1E1F4B",
@@ -427,79 +441,123 @@ const styles = StyleSheet.create({
         shadowRadius: 250,
         opacity: 0.9,
     },
+
+    /* ---------------- HEADER ---------------- */
     header: {
-        backgroundColor: "transparent",
-        padding: 18,
         paddingTop: 55,
+        paddingHorizontal: 20,
+        paddingBottom: 15,
         borderBottomWidth: 0.5,
         borderBottomColor: "rgba(255,255,255,0.1)",
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
     },
+
+    backButton: {
+        width: 38,
+        height: 38,
+        borderRadius: 19,
+        backgroundColor: "rgba(255,255,255,0.12)",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    backIcon: {
+        color: "#fff",
+        fontSize: 18,
+        fontWeight: "700",
+    },
+
     headerTitle: {
         color: "#FFFFFF",
         fontSize: 18,
         fontWeight: "700",
     },
+
+    /* ---------------- LOADING ---------------- */
     loadingContainer: {
         flex: 1,
         justifyContent: "center",
         alignItems: "center",
     },
+
+    /* ---------------- MESSAGE LIST ---------------- */
     messageList: {
-        padding: 12,
+        padding: 16,
+        paddingTop: 10,
         flexGrow: 1,
     },
+
     msgWrap: {
-        marginBottom: 10,
-        maxWidth: "75%",
+        marginVertical: 6,
+        maxWidth: "78%",
     },
+
+    /* BUBBLE BASE STYLE */
     bubble: {
-        padding: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
         borderRadius: 16,
         shadowColor: "#000",
-        shadowOpacity: 0.3,
-        shadowRadius: 6,
-        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.35,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
     },
+
+    /* SENDER (ME) */
     mine: {
         backgroundColor: "#00D4C2",
+        alignSelf: "flex-end",
         borderBottomRightRadius: 4,
+        shadowColor: "#00C1FF",
+        shadowOpacity: 0.4,
     },
+
+    /* RECEIVER */
     theirs: {
-        backgroundColor: "rgba(255,255,255,0.1)",
+        backgroundColor: "rgba(255,255,255,0.12)",
+        alignSelf: "flex-start",
         borderBottomLeftRadius: 4,
+        shadowOpacity: 0.25,
     },
+
     msgText: {
-        color: "#fff",
         fontSize: 15,
+        color: "#fff",
         lineHeight: 20,
     },
+
     time: {
         fontSize: 10,
         color: "rgba(255,255,255,0.6)",
-        marginTop: 3,
+        marginTop: 4,
         textAlign: "right",
     },
+
+    /* ---------------- INPUT AREA ---------------- */
     inputRow: {
         flexDirection: "row",
         alignItems: "center",
-        padding: 10,
-        backgroundColor: "rgba(255,255,255,0.08)",
+        padding: 12,
+        gap: 10,
+        backgroundColor: "rgba(255,255,255,0.05)",
         borderTopWidth: 0.5,
         borderTopColor: "rgba(255,255,255,0.1)",
     },
+
     input: {
         flex: 1,
-        backgroundColor: "rgba(255,255,255,0.15)",
-        borderRadius: 25,
         paddingHorizontal: 16,
         paddingVertical: 10,
-        color: "#fff",
+        backgroundColor: "rgba(255,255,255,0.15)",
+        borderRadius: 24,
         fontSize: 15,
-        maxHeight: 100,
+        color: "#fff",
+        maxHeight: 110,
     },
+
     sendButton: {
         backgroundColor: "#00D4C2",
-        marginLeft: 10,
         paddingHorizontal: 18,
         paddingVertical: 10,
         borderRadius: 25,
@@ -508,9 +566,11 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 4 },
     },
+
     sendButtonDisabled: {
-        backgroundColor: "rgba(255,255,255,0.2)",
+        backgroundColor: "rgba(255,255,255,0.25)",
     },
+
     sendText: {
         color: "#fff",
         fontWeight: "700",
