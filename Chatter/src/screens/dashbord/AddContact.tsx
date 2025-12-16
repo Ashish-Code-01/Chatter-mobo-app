@@ -16,8 +16,11 @@ import Contacts from 'react-native-contacts';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const API_URL = "http://10.73.208.98:8000"; // Update for production
+// const API_URL = "https://chatter-mobo-app.onrender.com";
+
 interface ContactData {
-    phoneNumber: string;
+    phoneNumber: number | string;
     displayName: string;
     isRegistered: boolean;
     userData?: {
@@ -51,7 +54,7 @@ const Home = ({ navigation }: any) => {
             }
 
             const response = await axios.post(
-                'https://chatter-mobo-app.onrender.com/api/contact/registered',
+                `${API_URL}/api/contact/registered`,
                 {},
                 { headers: { token } }
             );
@@ -83,7 +86,7 @@ const Home = ({ navigation }: any) => {
                 }));
 
             const response = await axios.post(
-                'https://chatter-mobo-app.onrender.com/api/contact/sync',
+                `${API_URL}/api/contact/sync`,
                 { contacts: formattedContacts },
                 { headers: { token } }
             );
@@ -143,7 +146,11 @@ const Home = ({ navigation }: any) => {
 
     const handleContactPress = async (contact: ContactData) => {
         try {
-            const myPhoneNumber = await AsyncStorage.getItem('MyPhone');
+            const User = await AsyncStorage.getItem('User');
+            const parsedUser = User ? JSON.parse(User) : null;
+            const myPhoneNumber = parsedUser?.phoneNumber;
+            console.log(myPhoneNumber);
+
             if (!myPhoneNumber) {
                 Alert.alert(
                     'Error',
@@ -243,116 +250,156 @@ const Home = ({ navigation }: any) => {
 export default Home;
 
 const styles = StyleSheet.create({
+    /* ==================== CONTAINER ==================== */
     container: {
         flex: 1,
-        backgroundColor: '#131537',
+        backgroundColor: '#0F1419',
     },
+
+    /* ==================== BACKGROUND ==================== */
     backgroundOverlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: '#1E1F4B',
-        shadowColor: '#0D0F2C',
-        shadowOffset: { width: 0, height: -250 },
-        shadowOpacity: 0.8,
-        shadowRadius: 250,
-        opacity: 0.9,
+        backgroundColor: '#0F1419',
     },
+
+    /* ==================== HEADER ==================== */
     header: {
-        padding: 20,
-        borderBottomWidth: 0.5,
-        borderBottomColor: 'rgba(255,255,255,0.1)',
+        paddingHorizontal: 18,
+        paddingTop: 50,
+        paddingBottom: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0, 212, 194, 0.1)',
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
     },
+
     title: {
-        fontSize: 24,
+        fontSize: 28,
         fontWeight: '800',
         color: '#FFFFFF',
+        letterSpacing: 0.5,
     },
+
+    /* ==================== CENTER CONTENT ==================== */
     centerContent: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
     },
+
     emptyText: {
         fontSize: 16,
-        color: '#C5C9F2',
-        marginBottom: 20,
+        color: 'rgba(200, 210, 234, 0.7)',
+        marginBottom: 24,
+        fontWeight: '500',
     },
+
+    /* ==================== RETRY BUTTON ==================== */
     retryButton: {
-        backgroundColor: '#00D4C2',
-        paddingHorizontal: 25,
-        paddingVertical: 12,
-        borderRadius: 25,
-        shadowColor: '#00C1FF',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
+        backgroundColor: 'rgba(0, 212, 194, 0.9)',
+        paddingHorizontal: 28,
+        paddingVertical: 14,
+        borderRadius: 16,
+        shadowColor: '#00D4C2',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.5,
+        shadowRadius: 16,
     },
+
     retryButtonText: {
-        color: '#fff',
+        color: '#0F1419',
         fontSize: 16,
         fontWeight: '700',
+        letterSpacing: 0.3,
     },
+
+    /* ==================== CONTACT ITEM ==================== */
     contactItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginHorizontal: 15,
+        marginHorizontal: 12,
         marginVertical: 8,
-        backgroundColor: 'rgba(255,255,255,0.08)',
-        borderRadius: 14,
-        padding: 15,
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
+        borderRadius: 18,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: 'rgba(0, 212, 194, 0.1)',
         shadowColor: '#000',
-        shadowOpacity: 0.3,
+        shadowOpacity: 0.2,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 4 },
     },
+
     registeredContact: {
-        borderColor: '#00D4C2',
-        borderWidth: 1,
+        borderColor: 'rgba(0, 212, 194, 0.3)',
+        backgroundColor: 'rgba(0, 212, 194, 0.05)',
     },
+
+    /* ==================== AVATAR ==================== */
     avatarContainer: {
-        width: 55,
-        height: 55,
-        borderRadius: 27,
-        backgroundColor: 'rgba(0,212,194,0.15)',
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        backgroundColor: 'rgba(0, 212, 194, 0.15)',
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 15,
+        marginRight: 14,
+        borderWidth: 1,
+        borderColor: 'rgba(0, 212, 194, 0.3)',
     },
+
     avatar: {
-        width: 55,
-        height: 55,
-        borderRadius: 27,
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+        borderWidth: 1,
+        borderColor: 'rgba(0, 212, 194, 0.3)',
     },
+
     avatarText: {
         color: '#00D4C2',
-        fontSize: 20,
-        fontWeight: 'bold',
+        fontSize: 18,
+        fontWeight: '700',
     },
+
+    /* ==================== CONTACT DETAILS ==================== */
     contactDetails: {
         flex: 1,
     },
+
     contactName: {
-        fontSize: 17,
-        fontWeight: '700',
+        fontSize: 16,
+        fontWeight: '600',
         color: '#FFFFFF',
+        letterSpacing: 0.3,
     },
+
     contactInfo: {
-        fontSize: 14,
-        color: '#C5C9F2',
+        fontSize: 13,
+        color: 'rgba(200, 210, 234, 0.7)',
+        marginTop: 4,
+        fontWeight: '400',
     },
+
+    /* ==================== BADGE ==================== */
     badge: {
-        backgroundColor: '#00D4C2',
-        paddingHorizontal: 8,
-        paddingVertical: 2,
+        backgroundColor: 'rgba(0, 212, 194, 0.85)',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
         borderRadius: 12,
         alignSelf: 'flex-start',
-        marginTop: 4,
+        marginTop: 6,
+        shadowColor: '#00D4C2',
+        shadowOpacity: 0.4,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
     },
+
     badgeText: {
-        color: '#fff',
-        fontSize: 12,
-        fontWeight: '600',
+        color: '#0F1419',
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 0.3,
     },
 });

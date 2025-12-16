@@ -12,6 +12,9 @@ import {
 } from 'react-native';
 import axios from 'axios';
 
+const API_URL = "http://10.73.208.98:8000"; // Update for production
+// const API_URL = "https://chatter-mobo-app.onrender.com";
+
 const LoginScreen = ({ navigation }: any) => {
     const [phone, setPhone] = useState('');
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -32,7 +35,7 @@ const LoginScreen = ({ navigation }: any) => {
 
         try {
             navigation.replace('Otp', { phone });
-            await axios.post('https://chatter-mobo-app.onrender.com/auth/login', {
+            await axios.post(`${API_URL}/auth/login`, {
                 phoneNumber: phone,
             });
         } catch (error) {
@@ -86,83 +89,87 @@ const LoginScreen = ({ navigation }: any) => {
 export default LoginScreen;
 
 const styles = StyleSheet.create({
-    // Simulated gradient background using layered colors
+    /* ==================== CONTAINER ==================== */
     container: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#131537',
-        // add subtle simulated gradient by shadow overlay
-        shadowColor: '#1E1F4B',
-        shadowOffset: { width: 0, height: -200 },
-        shadowOpacity: 0.5,
-        shadowRadius: 200,
+        backgroundColor: '#0F1419',
     },
 
-    // Card with frosted glass illusion
+    /* ==================== CARD ==================== */
     card: {
-        width: '90%',
+        width: '88%',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.08)',
-        borderRadius: 25,
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
+        borderRadius: 28,
         paddingVertical: 50,
-        paddingHorizontal: 25,
-        shadowColor: '#000',
-        shadowOpacity: 0.25,
+        paddingHorizontal: 28,
+        borderWidth: 1,
+        borderColor: 'rgba(0, 212, 194, 0.15)',
+        shadowColor: '#00D4C2',
+        shadowOpacity: 0.2,
         shadowRadius: 20,
         shadowOffset: { width: 0, height: 10 },
     },
 
-    // Typography hierarchy
+    /* ==================== TYPOGRAPHY ==================== */
     title: {
-        fontSize: 32,
+        fontSize: 36,
         fontWeight: '800',
         color: '#FFFFFF',
-        marginBottom: 10,
-        letterSpacing: 0.8,
-    },
-    subtitle: {
-        fontSize: 16,
-        color: '#C5C9F2',
-        textAlign: 'center',
-        marginBottom: 35,
+        marginBottom: 12,
+        letterSpacing: 1,
     },
 
-    // Input field styling
+    subtitle: {
+        fontSize: 15,
+        color: 'rgba(200, 210, 234, 0.8)',
+        textAlign: 'center',
+        marginBottom: 40,
+        fontWeight: '500',
+        lineHeight: 22,
+    },
+
+    /* ==================== INPUT FIELD ==================== */
     inputWrapper: {
         width: '100%',
-        backgroundColor: 'rgba(255, 255, 255, 0.12)',
-        borderRadius: 15,
+        backgroundColor: 'rgba(255, 255, 255, 0.06)',
+        borderRadius: 16,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.15)',
-        marginBottom: 30,
+        borderColor: 'rgba(0, 212, 194, 0.2)',
+        marginBottom: 28,
         paddingHorizontal: 20,
     },
+
     input: {
         color: '#fff',
-        fontSize: 18,
-        height: 50,
-        letterSpacing: 0.3,
+        fontSize: 17,
+        height: 52,
+        letterSpacing: 0.4,
+        fontWeight: '500',
     },
 
-    // Button with simulated gradient and shadow
+    /* ==================== BUTTON ==================== */
     buttonContainer: {
         width: '100%',
     },
+
     button: {
-        backgroundColor: '#00D4C2',
-        paddingVertical: 15,
-        borderRadius: 30,
+        backgroundColor: 'rgba(0, 212, 194, 0.9)',
+        paddingVertical: 16,
+        borderRadius: 16,
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: '#00C1FF',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.4,
-        shadowRadius: 12,
+        shadowColor: '#00D4C2',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.5,
+        shadowRadius: 16,
     },
+
     buttonText: {
-        color: '#fff',
-        fontSize: 18,
+        color: '#0F1419',
+        fontSize: 17,
         fontWeight: '700',
         letterSpacing: 0.5,
     },

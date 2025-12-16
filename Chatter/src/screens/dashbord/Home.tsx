@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
     StyleSheet,
     Text,
@@ -15,122 +15,35 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io } from "socket.io-client";
 
-const socket = io("https://chatter-mobo-app.onrender.com/");
+const API_URL = "http://10.73.208.98:8000"; // Update this for production
+// const API_URL = "https://chatter-mobo-app.onrender.com";
+
+const socket = io(API_URL);
+
+
 
 const Home = ({ navigation }: any) => {
     const [user, setUser] = useState<any>(null);
     const [unseenMessages, setUnseenMessages] = useState<any>({});
     const [UsersContact, setUsersContact] = useState<any>([]);
     const [menuVisible, setMenuVisible] = useState(false);
+    const [contactStatusMap, setContactStatusMap] = useState<any>({});
 
-    const requestPermissions = async () => {
+    const fetchContactStatus = useCallback(async (phoneNumber: string) => {
         try {
-            const permission =
-                Platform.OS === 'ios'
-                    ? PERMISSIONS.IOS.CONTACTS
-                    : PERMISSIONS.ANDROID.READ_CONTACTS;
-
-            const result = await request(permission);
-            if (result === RESULTS.GRANTED) await getContacts();
-            else Alert.alert('Permission Required', 'Enable contact permission in settings.');
-        } catch (error) {
-            console.error('Permission request error:', error);
-        }
-    };
-
-    const getUser = async () => {
-        try {
-            const token = await AsyncStorage.getItem("token");
-            if (!token) return;
-
-            const savedUser = await AsyncStorage.getItem("User");
-
-            if (savedUser) {
-                const parsed = JSON.parse(savedUser);
-                console.log(parsed);
-                setUser(parsed);
-                return;
-            }
-
-            const { data } = await axios.post(
-                "https://chatter-mobo-app.onrender.com/auth/me",
-                {},
-                { headers: { token } }
+            const response = await axios.get(
+                `${API_URL}/api/online/status/${phoneNumber}`
             );
-
-            if (data?.user) {
-                setUser(data.user);
-                await AsyncStorage.setItem("User", JSON.stringify(data.user));
-            }
-        } catch (error) {
-            console.error("User fetch error:", error);
-        }
-    };
-
-    const getContacts = async () => {
-        try {
-            const deviceContacts = await Contacts.getAll();
-            if (deviceContacts.length === 0) {
-                Alert.alert("No Contacts", "Your device has no contacts saved.");
-                return;
-            }
-            await syncContactsWithBackend(deviceContacts);
-        } catch (error) {
-            console.error("Error loading contacts:", error);
-        }
-    };
-
-    const syncContactsWithBackend = async (deviceContacts: any) => {
-        try {
-            const token = await AsyncStorage.getItem("token");
-            if (!token) return;
-
-            const formatted = deviceContacts
-                .filter((c: any) => c.phoneNumbers?.length > 0)
-                .map((c: any) => ({
-                    displayName: c.displayName || c.givenName || "Unknown",
-                    phoneNumber: c.phoneNumbers[0].number.replace(/[\s\-()]/g, ""),
+            if (response.data?.success) {
+                setContactStatusMap((prev: any) => ({
+                    ...prev,
+                    [phoneNumber]: response.data.data.isOnline
                 }));
-
-            await axios.post(
-                "https://chatter-mobo-app.onrender.com/api/contact/sync",
-                { contacts: formatted },
-                { headers: { token } }
-            );
-        } catch (error) {
-            console.error("Sync error:", error);
-        }
-    };
-
-    const allUnseenMessages = async () => {
-        try {
-            const token = await AsyncStorage.getItem("token");
-            if (!token) return;
-
-            const { data } = await axios.post(
-                "https://chatter-mobo-app.onrender.com/api/messages/get/msg/all",
-                {},
-                { headers: { token } }
-            );
-
-            if (data?.success) {
-                const grouped: any = {};
-                data.data.forEach((msg: any) => {
-                    if (!msg.seen) {
-                        grouped[msg.sender] = (grouped[msg.sender] || 0) + 1;
-                    }
-                });
-                setUnseenMessages(grouped);
             }
         } catch (error) {
-            console.error("Message fetch error:", error);
+            console.error(`Error fetching status for ${phoneNumber}:`, error);
         }
-    };
-
-    const getUsersContact = async () => {
-        const res = await AsyncStorage.getItem("Users");
-        setUsersContact(res ? JSON.parse(res) : []);
-    };
+    }, []);
 
     const handleLogout = async () => {
         Alert.alert("Logout", "Are you sure?", [
@@ -148,11 +61,106 @@ const Home = ({ navigation }: any) => {
     };
 
     useEffect(() => {
-        getUser();
-        getUsersContact();
-        requestPermissions();
-        allUnseenMessages();
-    }, []);
+        const initialize = async () => {
+            try {
+                // Request permissions
+                const permission =
+                    Platform.OS === 'ios'
+                        ? PERMISSIONS.IOS.CONTACTS
+                        : PERMISSIONS.ANDROID.READ_CONTACTS;
+
+                const result = await request(permission);
+                if (result === RESULTS.GRANTED) {
+                    const deviceContacts = await Contacts.getAll();
+                    if (deviceContacts.length > 0) {
+                        const token = await AsyncStorage.getItem("token");
+                        if (token) {
+                            const formatted = deviceContacts
+                                .filter((c: any) => c.phoneNumbers?.length > 0)
+                                .map((c: any) => ({
+                                    displayName: c.displayName || c.givenName || "Unknown",
+                                    phoneNumber: c.phoneNumbers[0].number.replace(/[\s\-()]/g, ""),
+                                }));
+
+                            await axios.post(
+                                `${API_URL}/api/contact/sync`,
+                                { contacts: formatted },
+                                { headers: { token } }
+                            );
+                        }
+                    }
+                } else {
+                    Alert.alert('Permission Required', 'Enable contact permission in settings.');
+                }
+
+                // Get user
+                const token = await AsyncStorage.getItem("token");
+                if (!token) return;
+
+                const savedUser = await AsyncStorage.getItem("User");
+
+                if (savedUser) {
+                    const parsed = JSON.parse(savedUser);
+                    setUser(parsed);
+                    socket.emit("register", parsed.phoneNumber);
+                } else {
+                    const { data } = await axios.post(
+                        `${API_URL}/auth/me`,
+                        {},
+                        { headers: { token } }
+                    );
+
+                    if (data?.user) {
+                        setUser(data.user);
+                        await AsyncStorage.setItem("User", JSON.stringify(data.user));
+                        socket.emit("register", data.user.phoneNumber);
+                    }
+                }
+
+                // Get unseen messages
+                const { data: msgData } = await axios.post(
+                    `${API_URL}/api/messages/get/msg/all`,
+                    {},
+                    { headers: { token } }
+                );
+
+                if (msgData?.success) {
+                    const grouped: any = {};
+                    msgData.data.forEach((msg: any) => {
+                        if (!msg.seen) {
+                            grouped[msg.sender] = (grouped[msg.sender] || 0) + 1;
+                        }
+                    });
+                    setUnseenMessages(grouped);
+                }
+
+                // Get contacts and statuses
+                const res = await AsyncStorage.getItem("Users");
+                const contacts = res ? JSON.parse(res) : [];
+                setUsersContact(contacts);
+
+                contacts.forEach((contact: any) => {
+                    fetchContactStatus(contact.phone);
+                });
+            } catch (error) {
+                console.error('Initialization error:', error);
+            }
+        };
+
+        initialize();
+
+        // Listen for status changes
+        socket.on("userStatusChanged", ({ phoneNumber, isOnline }: { phoneNumber: string; isOnline: boolean }) => {
+            setContactStatusMap((prev: any) => ({
+                ...prev,
+                [phoneNumber]: isOnline
+            }));
+        });
+
+        return () => {
+            socket.off("userStatusChanged");
+        };
+    }, [fetchContactStatus]);
 
     return (
         <View style={styles.container}>
@@ -169,10 +177,11 @@ const Home = ({ navigation }: any) => {
                 ListEmptyComponent={
                     <Text style={styles.emptyText}>No contacts found.</Text>
                 }
-                contentContainerStyle={{ paddingBottom: 90 }}
+                contentContainerStyle={styles.flatListContent}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => {
                     const unseen = unseenMessages[item.phone] || 0;
+                    const isOnline = contactStatusMap[item.phone] || false;
 
                     return (
                         <TouchableOpacity
@@ -186,7 +195,12 @@ const Home = ({ navigation }: any) => {
                         >
                             <View>
                                 <Text style={styles.name}>{item.name}</Text>
-                                <Text style={styles.phone}>{item.phone}</Text>
+                                <View style={styles.phoneStatusRow}>
+                                    <Text style={styles.phone}>{item.phone}</Text>
+                                    <Text style={[styles.statusIndicator, isOnline ? styles.statusOnline : styles.statusOffline]}>
+                                        {isOnline ? "● Online" : "● Offline"}
+                                    </Text>
+                                </View>
                             </View>
 
                             {unseen > 0 && (
@@ -229,7 +243,7 @@ const Home = ({ navigation }: any) => {
                         </TouchableOpacity>
 
                         <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-                            <Text style={[styles.menuText, { color: "#FF5D5D" }]}>Logout</Text>
+                            <Text style={[styles.menuText, styles.logoutText]}>Logout</Text>
                         </TouchableOpacity>
                     </View>
                 </TouchableOpacity>
@@ -243,121 +257,186 @@ export default Home;
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#10122C",
+        backgroundColor: "#0F1419",
     },
 
-    // HEADER
+    /* ==================== HEADER ==================== */
     header: {
-        paddingTop: 55,
-        paddingHorizontal: 20,
-        paddingBottom: 18,
+        paddingTop: 50,
+        paddingHorizontal: 18,
+        paddingBottom: 20,
         borderBottomWidth: 1,
-        borderBottomColor: "rgba(255,255,255,0.08)",
+        borderBottomColor: "rgba(0, 212, 194, 0.1)",
+        backgroundColor: "rgba(15, 20, 25, 0.5)",
     },
+
     title: {
-        fontSize: 28,
+        fontSize: 32,
         fontWeight: "800",
         color: "#FFFFFF",
+        letterSpacing: 1,
     },
+
     subtitle: {
-        marginTop: 4,
-        fontSize: 15,
-        color: "#C7C9F5",
+        marginTop: 6,
+        fontSize: 14,
+        color: "rgba(200, 210, 234, 0.8)",
+        fontWeight: "500",
     },
+
     menuButton: {
         position: "absolute",
-        right: 18,
-        top: 55,
+        right: 16,
+        top: 50,
         padding: 10,
     },
+
     menuDots: {
-        color: "#FFF",
+        color: "#FFFFFF",
         fontSize: 24,
         fontWeight: "700",
     },
 
-    // CONTACT LIST
+    /* ==================== CONTACT LIST ==================== */
     contactCard: {
-        backgroundColor: "rgba(255,255,255,0.06)",
-        marginHorizontal: 15,
+        backgroundColor: "rgba(255, 255, 255, 0.04)",
+        marginHorizontal: 12,
         marginTop: 10,
-        borderRadius: 14,
-        padding: 18,
+        borderRadius: 20,
+        padding: 14,
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
+        borderWidth: 1,
+        borderColor: "rgba(0, 212, 194, 0.1)",
     },
+
     name: {
-        fontSize: 17,
-        fontWeight: "700",
+        fontSize: 16,
+        fontWeight: "600",
         color: "#FFFFFF",
+        letterSpacing: 0.3,
     },
+
     phone: {
-        fontSize: 14,
-        color: "#C9CCF2",
-        marginTop: 2,
+        fontSize: 13,
+        color: "rgba(200, 210, 234, 0.7)",
+        marginTop: 4,
+        fontWeight: "400",
     },
-    badge: {
-        backgroundColor: "#00D4C2",
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 20,
-        minWidth: 24,
+
+    phoneStatusRow: {
+        flexDirection: "row",
         alignItems: "center",
+        gap: 8,
+        marginTop: 6,
     },
+
+    statusIndicator: {
+        fontSize: 11,
+        fontWeight: "500",
+        letterSpacing: 0.5,
+    },
+
+    badge: {
+        backgroundColor: "rgba(0, 212, 194, 0.85)",
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 20,
+        minWidth: 28,
+        alignItems: "center",
+        shadowColor: "#00D4C2",
+        shadowOpacity: 0.4,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 2 },
+    },
+
     badgeText: {
-        color: "#FFF",
+        color: "#0F1419",
         fontSize: 12,
         fontWeight: "700",
     },
+
     emptyText: {
         textAlign: "center",
-        marginTop: 60,
-        color: "#A0A3D2",
+        marginTop: 80,
+        color: "rgba(200, 210, 234, 0.5)",
         fontSize: 15,
+        fontWeight: "500",
     },
 
-    // FLOATING BUTTON
+    flatListContent: {
+        paddingBottom: 100,
+        paddingTop: 8,
+    },
+
+    statusOnline: {
+        color: "#00D4C2",
+    },
+
+    statusOffline: {
+        color: "rgba(169, 169, 197, 0.7)",
+    },
+
+    logoutText: {
+        color: "#FF5A5A",
+    },
+
+    /* ==================== FLOATING BUTTON ==================== */
     floatingButton: {
         position: "absolute",
-        right: 22,
-        bottom: 30,
-        width: 62,
-        height: 62,
-        backgroundColor: "#00D4C2",
-        borderRadius: 31,
+        right: 20,
+        bottom: 28,
+        width: 60,
+        height: 60,
+        backgroundColor: "rgba(0, 212, 194, 0.9)",
+        borderRadius: 30,
         justifyContent: "center",
         alignItems: "center",
-        elevation: 8,
+        shadowColor: "#00D4C2",
+        shadowOpacity: 0.5,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 8 },
     },
+
     floatingButtonText: {
-        color: "#FFF",
-        fontSize: 30,
+        color: "#0F1419",
+        fontSize: 32,
         fontWeight: "900",
     },
 
-    // MENU MODAL
+    /* ==================== MENU MODAL ==================== */
     modalOverlay: {
         flex: 1,
-        backgroundColor: "rgba(0,0,0,0.45)",
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
         justifyContent: "flex-start",
         alignItems: "flex-end",
     },
+
     menuContainer: {
-        backgroundColor: "#1A1C3F",
-        marginTop: 75,
-        marginRight: 14,
-        paddingVertical: 5,
-        borderRadius: 12,
-        width: 170,
-        elevation: 15,
+        backgroundColor: "rgba(30, 35, 50, 0.95)",
+        marginTop: 70,
+        marginRight: 12,
+        paddingVertical: 8,
+        borderRadius: 16,
+        width: 180,
+        borderWidth: 1,
+        borderColor: "rgba(0, 212, 194, 0.15)",
+        shadowColor: "#000",
+        shadowOpacity: 0.5,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 8 },
     },
+
     menuItem: {
-        paddingVertical: 13,
-        paddingHorizontal: 20,
+        paddingVertical: 14,
+        paddingHorizontal: 18,
     },
+
     menuText: {
-        fontSize: 16,
-        color: "#E6E7F5",
+        fontSize: 15,
+        color: "#FFFFFF",
+        fontWeight: "500",
+        letterSpacing: 0.3,
     },
 });

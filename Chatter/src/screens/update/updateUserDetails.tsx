@@ -16,6 +16,9 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
+const API_URL = "http://10.73.208.98:8000"; // Update for production
+// const API_URL = "https://chatter-mobo-app.onrender.com";
+
 const EditDetails = ({ navigation }: any) => {
     const [name, setName] = useState('');
     const [bio, setBio] = useState('');
@@ -34,7 +37,7 @@ const EditDetails = ({ navigation }: any) => {
         }
         else {
             const { data } = await axios.post(
-                "https://chatter-mobo-app.onrender.com/auth/me",
+                `${API_URL}/auth/me`,
                 {},
                 { headers: { token } }
             );
@@ -117,7 +120,7 @@ const EditDetails = ({ navigation }: any) => {
             }
 
             const response = await axios.put(
-                'https://chatter-mobo-app.onrender.com/auth/update',
+                `${API_URL}/auth/update`,
                 { name, bio, avatar: avatarUrl },
                 { headers: { token } }
             );
@@ -126,7 +129,7 @@ const EditDetails = ({ navigation }: any) => {
                 Alert.alert('Success', 'Profile updated successfully', [
                     { text: 'OK', onPress: () => navigation.navigate('home') },
                 ]);
-                await AsyncStorage.setItem("User", JSON.stringify(response.data.updatedUser));
+                await AsyncStorage.setItem("User", JSON.stringify(response.data.data));
             } else {
                 Alert.alert('Error', response.data.message || 'Failed to update profile');
             }
@@ -204,95 +207,131 @@ const EditDetails = ({ navigation }: any) => {
 export default EditDetails;
 
 const styles = StyleSheet.create({
+    /* ==================== CONTAINER ==================== */
     container: {
         flex: 1,
-        backgroundColor: '#131537',
+        backgroundColor: '#0F1419',
     },
+
+    /* ==================== BACKGROUND ==================== */
     backgroundOverlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: '#1E1F4B',
-        shadowColor: '#0D0F2C',
-        shadowOffset: { width: 0, height: -250 },
-        shadowOpacity: 0.8,
-        shadowRadius: 250,
-        opacity: 0.9,
+        backgroundColor: '#0F1419',
     },
+
+    /* ==================== SCROLL CONTENT ==================== */
     scrollContent: {
-        padding: 20,
+        paddingHorizontal: 18,
+        paddingVertical: 20,
         alignItems: 'center',
     },
+
+    /* ==================== TITLE ==================== */
     title: {
-        fontSize: 26,
+        fontSize: 28,
         fontWeight: '800',
         color: '#FFFFFF',
-        marginVertical: 20,
+        marginVertical: 24,
+        letterSpacing: 0.5,
     },
+
+    /* ==================== AVATAR ==================== */
     avatar: {
         width: 130,
         height: 130,
         borderRadius: 65,
         alignSelf: 'center',
-        marginBottom: 10,
-        borderWidth: 3,
-        borderColor: '#00D4C2',
+        marginBottom: 12,
+        borderWidth: 2,
+        borderColor: 'rgba(0, 212, 194, 0.4)',
+        shadowColor: '#00D4C2',
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 4 },
     },
+
     placeholderAvatar: {
         width: 130,
         height: 130,
         borderRadius: 65,
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(0, 212, 194, 0.1)',
         justifyContent: 'center',
         alignItems: 'center',
         alignSelf: 'center',
-        marginBottom: 10,
+        marginBottom: 12,
         borderWidth: 2,
         borderStyle: 'dashed',
-        borderColor: '#00D4C2',
+        borderColor: 'rgba(0, 212, 194, 0.4)',
     },
+
     avatarText: {
-        fontSize: 45,
+        fontSize: 48,
         color: '#00D4C2',
+        fontWeight: '700',
     },
+
     avatarHint: {
         textAlign: 'center',
-        color: '#00D4C2',
-        fontSize: 14,
-        marginBottom: 25,
+        color: 'rgba(0, 212, 194, 0.8)',
+        fontSize: 13,
+        marginBottom: 28,
+        fontWeight: '500',
     },
+
+    /* ==================== CARD ==================== */
     card: {
         width: '100%',
-        backgroundColor: 'rgba(255,255,255,0.08)',
+        backgroundColor: 'rgba(255, 255, 255, 0.04)',
         borderRadius: 20,
         padding: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(0, 212, 194, 0.15)',
     },
+
+    /* ==================== LABELS ==================== */
     label: {
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '600',
-        color: '#C5C9F2',
-        marginBottom: 8,
+        color: 'rgba(200, 210, 234, 0.8)',
+        marginBottom: 10,
+        letterSpacing: 0.3,
     },
+
+    /* ==================== INPUTS ==================== */
     input: {
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.2)',
-        borderRadius: 10,
-        padding: 12,
-        fontSize: 16,
-        marginBottom: 25,
+        borderColor: 'rgba(0, 212, 194, 0.2)',
+        borderRadius: 14,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        fontSize: 15,
+        marginBottom: 24,
         color: '#fff',
-        backgroundColor: 'rgba(255,255,255,0.12)',
+        backgroundColor: 'rgba(255, 255, 255, 0.06)',
+        fontWeight: '500',
     },
+
+    /* ==================== SAVE BUTTON ==================== */
     saveButton: {
-        backgroundColor: '#00D4C2',
-        paddingVertical: 14,
-        borderRadius: 25,
+        backgroundColor: 'rgba(0, 212, 194, 0.9)',
+        paddingVertical: 16,
+        borderRadius: 16,
         alignItems: 'center',
+        marginTop: 8,
+        shadowColor: '#00D4C2',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.5,
+        shadowRadius: 16,
     },
+
     saveButtonDisabled: {
-        opacity: 0.6,
+        opacity: 0.5,
     },
+
     saveText: {
-        color: '#fff',
-        fontSize: 18,
+        color: '#0F1419',
+        fontSize: 17,
         fontWeight: '700',
+        letterSpacing: 0.5,
     },
 });

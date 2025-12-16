@@ -9,14 +9,16 @@ import {
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
+    Image,
 } from "react-native";
 import { io, Socket } from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 
 // Configuration
-const API_URL = "https://chatter-mobo-app.onrender.com";
-// const API_URL = "http://10.172.241.98:8000"; // Uncomment for local dev
+// const API_URL = "https://chatter-mobo-app.onrender.com";
+const API_URL = "http://10.73.208.98:8000"; // Uncomment for local dev
+const DEFAULT_AVATAR = "https://res.cloudinary.com/dqmxpgv5k/image/upload/v1765892967/A_circular_default_c_cafouy.png";
 
 interface Message {
     from: string;
@@ -35,6 +37,8 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
     const [secretKey, setSecretKey] = useState<string>("");
+    const [contactIsOnline, setContactIsOnline] = useState(false);
+    const [contactAvatar, setContactAvatar] = useState<string>("");
 
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!'_-&@#$%*()/:<>|+= ";
 
@@ -73,6 +77,7 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
                 name: contactPhone,
                 phone: contactPhone,
                 publickey: secretkey || "",
+                avatar: contactAvatar || "",
             };
 
             const updatedUsers = [...existingUsers, contact];
@@ -96,30 +101,6 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
             console.error("Error marking messages as seen:", error.message);
         }
     }, [contactPhone]);
-
-    // Initialize encryption key
-    const initializeSecretKey = async () => {
-        try {
-            let key = await AsyncStorage.getItem("secretkey");
-
-            if (!key) {
-                const privatekey = await AsyncStorage.getItem("privatekey");
-                const serverkey = await AsyncStorage.getItem("serverkey");
-
-                if (privatekey && serverkey) {
-                    key = privatekey + serverkey;
-                    await AsyncStorage.setItem("secretkey", key);
-                }
-            }
-
-            if (key) {
-                setSecretKey(key);
-            }
-
-        } catch (error) {
-            console.error("Error initializing secret key:", error);
-        }
-    };
 
     // Encrypt Message
     const encryptMessage = (text: string, key: string): string => {
@@ -183,9 +164,12 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
             reconnection: true,
         });
 
-        socketRef.current.on("connect", () => {
-            console.log("Socket connected");
-            socketRef.current?.emit("register", myPhone);
+
+        // Listen for online status changes
+        socketRef.current.on("userStatusChanged", ({ phoneNumber, isOnline }: { phoneNumber: string; isOnline: boolean }) => {
+            if (phoneNumber === contactPhone) {
+                setContactIsOnline(isOnline);
+            }
         });
 
         socketRef.current.on("receiveMessage", async ({ from, message: encryptedMsg, publickey }: { from: string; message: string; publickey: string }) => {
@@ -195,18 +179,36 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
                     return; // Skip our own messages from socket
                 }
 
-                // Use the stored secret key or the provided public key
-                const keyToUse = secretKey || publickey;
+                // Get our stored secret key
+                let keyToUse = secretKey;
+
+                if (!keyToUse) {
+                    // Try to derive key from the public key sent by sender
+                    const privatekey = await AsyncStorage.getItem("privatekey");
+                    if (publickey && privatekey) {
+                        // Combine sender's public key (first 16 chars of their private) with our private key
+                        keyToUse = publickey + privatekey;
+                        console.log("Derived key from public key + our private key");
+                    } else {
+                        const serverkey = await AsyncStorage.getItem("serverkey");
+                        if (privatekey && serverkey) {
+                            keyToUse = privatekey + serverkey;
+                        }
+                    }
+                }
+
+                if (!keyToUse) {
+                    console.error("No decryption key available");
+                    return;
+                }
+
+                // Decrypt the message
                 const decryptedMsg = decryptMessage(encryptedMsg, keyToUse);
 
-                // Store the public key if we received a new one
+                // Store the public key for future reference
                 if (publickey && !secretKey) {
-                    const privatekey = await AsyncStorage.getItem("privatekey");
-                    if (privatekey) {
-                        const fullKey = publickey + privatekey;
-                        await AsyncStorage.setItem("secretkey", fullKey);
-                        setSecretKey(fullKey);
-                    }
+                    await AsyncStorage.setItem("secretkey", keyToUse);
+                    setSecretKey(keyToUse);
                 }
 
                 const newMsg: Message = {
@@ -214,6 +216,13 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
                     message: decryptedMsg,
                     timestamp: Date.now(),
                 };
+
+                console.log("Message received and decrypted:", {
+                    from: from,
+                    encrypted: encryptedMsg,
+                    decrypted: decryptedMsg,
+                    keyUsed: keyToUse
+                });
 
                 setMessages((prev) => {
                     const merged = dedupeMessages([...prev, newMsg]);
@@ -232,17 +241,20 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
         return () => {
             socketRef.current?.disconnect();
         };
-    }, [myPhone, secretKey, dedupeMessages, chatId]);
+    }, [myPhone, secretKey, dedupeMessages, chatId, contactPhone]);
 
     useEffect(() => {
         (async () => {
             try {
-                await initializeSecretKey();
 
                 const local = await AsyncStorage.getItem(chatId);
                 if (local) {
                     setMessages(JSON.parse(local));
                 }
+
+                // Fetch initial online status of contact
+                await fetchContactStatus();
+                await fetchContactAvatar();
 
                 await fetchMessagesFromBackend();
                 await markMessagesSeen();
@@ -254,6 +266,37 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
             }
         })();
     }, []);
+
+    const fetchContactStatus = async () => {
+        try {
+            const response = await axios.get(
+                `${API_URL}/api/online/status/${contactPhone}`
+            );
+            if (response.data?.success) {
+                setContactIsOnline(response.data.data.isOnline);
+            }
+        } catch (error) {
+            console.error("Error fetching contact status:", error);
+        }
+    };
+
+    const fetchContactAvatar = async () => {
+        try {
+            const response = await axios.get(
+                `${API_URL}/auth/user/${contactPhone}`
+            );
+            if (response.data?.success && response.data?.data?.avatar) {
+                setContactAvatar(response.data.data.avatar);
+            } else {
+                // Use default avatar if none found
+                setContactAvatar(DEFAULT_AVATAR);
+            }
+        } catch (error) {
+            console.error("Error fetching contact avatar:", error);
+            // Use default avatar on error
+            setContactAvatar(DEFAULT_AVATAR);
+        }
+    };
 
     const fetchMessagesFromBackend = async () => {
         try {
@@ -267,14 +310,28 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
             );
 
             const raw = res.data?.data || [];
-            console.log(raw);
+            console.log("Messages from backend:", raw);
             const secretkey = await AsyncStorage.getItem("secretkey");
 
-            const backendMsgs: Message[] = raw.map((msg: any) => ({
-                from: msg.sender === myPhone ? "Me" : msg.sender,
-                message: decryptMessage(msg.content, msg.Publickey || secretkey),
-                timestamp: new Date(msg.createdAt).getTime(),
-            }));
+            const backendMsgs: Message[] = raw.map((msg: any) => {
+                try {
+                    // FIX: Decrypt using secretkey (derived from own privatekey + contact's publickey)
+                    // Do NOT use msg.Publickey for decryption
+                    const decryptedContent = decryptMessage(msg.content, secretkey);
+                    return {
+                        from: msg.sender === myPhone ? "Me" : msg.sender,
+                        message: decryptedContent,
+                        timestamp: new Date(msg.createdAt).getTime(),
+                    };
+                } catch (error) {
+                    console.error("Error decrypting message:", error);
+                    return {
+                        from: msg.sender === myPhone ? "Me" : msg.sender,
+                        message: "[Decryption failed]",
+                        timestamp: new Date(msg.createdAt).getTime(),
+                    };
+                }
+            });
 
 
             setMessages((prev) => {
@@ -293,9 +350,7 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
         try {
             if (!message.trim()) return;
 
-            // Use the stored secret key
             let keyToUse = secretKey;
-
 
             // Fallback if secret key not available
             if (!keyToUse) {
@@ -304,6 +359,7 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
 
                 if (!privatekey || !serverkey) {
                     console.error("Encryption keys not found. Please login again.");
+                    Alert.alert("Error", "Encryption keys not found. Please login again.");
                     return;
                 }
 
@@ -328,29 +384,35 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
                 return updated;
             });
 
-            // Encrypt and send
+            // Encrypt message using the encryption key
             const encryptedMsg = encryptMessage(text, keyToUse);
 
-            // Send via socket (don't emit back to ourselves)
-            if (keyToUse.length === 64) {
-                socketRef.current?.emit("sendMessage", {
-                    from: myPhone,
-                    to: contactPhone,
-                    message: encryptedMsg,
-                    publickey: "",
-                });
+            if (!encryptedMsg || encryptedMsg === text) {
+                console.warn("Message encryption may have failed");
             }
-            else {
-                socketRef.current?.emit("sendMessage", {
-                    from: myPhone,
-                    to: contactPhone,
-                    message: encryptedMsg,
-                    publickey: keyToUse,
-                });
-            }
+
+            // Get public key (first 16 characters of privatekey) to send to receiver
+            // The receiver will combine this with their privatekey to derive same decryption key
+            const publickey = keyToUse.substring(0, 16);
+
+            // Send via socket with encrypted message and public key
+            socketRef.current?.emit("sendMessage", {
+                from: myPhone,
+                to: contactPhone,
+                message: encryptedMsg,
+                publickey: publickey,  // Always send public key portion
+            });
+
+            console.log("Message sent encrypted:", {
+                original: text,
+                encrypted: encryptedMsg,
+                publickey: publickey,
+                keyUsed: keyToUse
+            });
 
         } catch (error) {
             console.error("Error sending message:", error);
+            Alert.alert("Error", "Failed to send message");
         }
     };
 
@@ -387,7 +449,22 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
         >
             <View style={styles.backgroundOverlay} />
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>{contactPhone}</Text>
+                {contactAvatar ? (
+                    <Image
+                        source={{ uri: contactAvatar }}
+                        style={styles.avatarImage}
+                    />
+                ) : (
+                    <View style={styles.avatarPlaceholder}>
+                        <Text style={styles.avatarText}>U</Text>
+                    </View>
+                )}
+                <View style={styles.headerContent}>
+                    <Text style={styles.headerTitle}>{contactPhone}</Text>
+                    <Text style={[styles.statusText, { color: contactIsOnline ? "#00D4C2" : "#A9A9C5" }]}>
+                        {contactIsOnline ? "● Online" : "● Offline"}
+                    </Text>
+                </View>
             </View>
 
             {loading ? (
@@ -429,151 +506,188 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: "#131537",
+        backgroundColor: "#0F1419",
     },
 
     backgroundOverlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: "#1E1F4B",
-        shadowColor: "#0D0F2C",
-        shadowOffset: { width: 0, height: -250 },
-        shadowOpacity: 0.8,
-        shadowRadius: 250,
-        opacity: 0.9,
+        backgroundColor: "#0F1419",
     },
 
-    /* ---------------- HEADER ---------------- */
+    /* ==================== HEADER ==================== */
     header: {
-        paddingTop: 55,
-        paddingHorizontal: 20,
-        paddingBottom: 15,
-        borderBottomWidth: 0.5,
-        borderBottomColor: "rgba(255,255,255,0.1)",
+        paddingTop: 50,
+        paddingHorizontal: 16,
+        paddingBottom: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: "rgba(0, 212, 194, 0.15)",
         flexDirection: "row",
         alignItems: "center",
-        gap: 12,
+        gap: 14,
+        backgroundColor: "rgba(15, 20, 25, 0.8)",
+        backdropFilter: "blur(10px)",
     },
 
-    backButton: {
-        width: 38,
-        height: 38,
-        borderRadius: 19,
-        backgroundColor: "rgba(255,255,255,0.12)",
-        justifyContent: "center",
-        alignItems: "center",
-    },
-    backIcon: {
-        color: "#fff",
-        fontSize: 18,
-        fontWeight: "700",
+    headerContent: {
+        flex: 1,
     },
 
     headerTitle: {
         color: "#FFFFFF",
-        fontSize: 18,
+        fontSize: 17,
+        fontWeight: "600",
+        letterSpacing: 0.3,
+    },
+
+    avatarImage: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: "rgba(0, 212, 194, 0.15)",
+        borderWidth: 2,
+        borderColor: "rgba(0, 212, 194, 0.3)",
+    },
+
+    avatarPlaceholder: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: "linear-gradient(135deg, #00D4C2 0%, #0099CC 100%)",
+        justifyContent: "center",
+        alignItems: "center",
+        borderWidth: 2,
+        borderColor: "rgba(0, 212, 194, 0.4)",
+    },
+
+    avatarText: {
+        color: "#fff",
+        fontSize: 20,
         fontWeight: "700",
     },
 
-    /* ---------------- LOADING ---------------- */
+    statusText: {
+        fontSize: 11,
+        marginTop: 4,
+        fontWeight: "500",
+        letterSpacing: 0.5,
+    },
+
+    /* ==================== LOADING ==================== */
     loadingContainer: {
         flex: 1,
         justifyContent: "center",
         alignItems: "center",
+        backgroundColor: "#0F1419",
     },
 
-    /* ---------------- MESSAGE LIST ---------------- */
+    /* ==================== MESSAGE LIST ==================== */
     messageList: {
-        padding: 16,
-        paddingTop: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 16,
         flexGrow: 1,
     },
 
     msgWrap: {
-        marginVertical: 6,
-        maxWidth: "78%",
+        marginVertical: 8,
+        maxWidth: "85%",
     },
 
     /* BUBBLE BASE STYLE */
     bubble: {
-        paddingVertical: 10,
-        paddingHorizontal: 14,
-        borderRadius: 16,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 18,
         shadowColor: "#000",
-        shadowOpacity: 0.35,
+        shadowOpacity: 0.3,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 4 },
     },
 
     /* SENDER (ME) */
     mine: {
-        backgroundColor: "#00D4C2",
+        backgroundColor: "rgba(0, 212, 194, 0.95)",
         alignSelf: "flex-end",
-        borderBottomRightRadius: 4,
-        shadowColor: "#00C1FF",
-        shadowOpacity: 0.4,
+        borderBottomRightRadius: 6,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        borderBottomLeftRadius: 20,
     },
 
     /* RECEIVER */
     theirs: {
-        backgroundColor: "rgba(255,255,255,0.12)",
+        backgroundColor: "rgba(255, 255, 255, 0.08)",
         alignSelf: "flex-start",
-        borderBottomLeftRadius: 4,
-        shadowOpacity: 0.25,
+        borderBottomLeftRadius: 6,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        borderBottomRightRadius: 20,
+        borderWidth: 1,
+        borderColor: "rgba(0, 212, 194, 0.2)",
     },
 
     msgText: {
         fontSize: 15,
         color: "#fff",
-        lineHeight: 20,
+        lineHeight: 21,
+        fontWeight: "500",
     },
 
     time: {
         fontSize: 10,
-        color: "rgba(255,255,255,0.6)",
-        marginTop: 4,
+        color: "rgba(255, 255, 255, 0.5)",
+        marginTop: 6,
         textAlign: "right",
+        fontWeight: "400",
     },
 
-    /* ---------------- INPUT AREA ---------------- */
+    /* ==================== INPUT AREA ==================== */
     inputRow: {
         flexDirection: "row",
-        alignItems: "center",
-        padding: 12,
+        alignItems: "flex-end",
+        paddingHorizontal: 12,
+        paddingVertical: 12,
         gap: 10,
-        backgroundColor: "rgba(255,255,255,0.05)",
-        borderTopWidth: 0.5,
-        borderTopColor: "rgba(255,255,255,0.1)",
+        backgroundColor: "rgba(15, 20, 25, 0.6)",
+        borderTopWidth: 1,
+        borderTopColor: "rgba(0, 212, 194, 0.1)",
     },
 
     input: {
         flex: 1,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        backgroundColor: "rgba(255,255,255,0.15)",
+        paddingHorizontal: 18,
+        paddingVertical: 12,
+        backgroundColor: "rgba(255, 255, 255, 0.06)",
         borderRadius: 24,
         fontSize: 15,
         color: "#fff",
-        maxHeight: 110,
+        maxHeight: 100,
+        borderWidth: 1,
+        borderColor: "rgba(0, 212, 194, 0.2)",
+        fontWeight: "500",
     },
 
     sendButton: {
-        backgroundColor: "#00D4C2",
-        paddingHorizontal: 18,
-        paddingVertical: 10,
-        borderRadius: 25,
-        shadowColor: "#00C1FF",
+        backgroundColor: "rgba(0, 212, 194, 0.9)",
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 24,
+        shadowColor: "#00D4C2",
         shadowOpacity: 0.4,
-        shadowRadius: 8,
+        shadowRadius: 12,
         shadowOffset: { width: 0, height: 4 },
+        justifyContent: "center",
+        alignItems: "center",
     },
 
     sendButtonDisabled: {
-        backgroundColor: "rgba(255,255,255,0.25)",
+        backgroundColor: "rgba(255, 255, 255, 0.15)",
+        shadowOpacity: 0,
     },
 
     sendText: {
-        color: "#fff",
+        color: "#0F1419",
         fontWeight: "700",
-        fontSize: 15,
+        fontSize: 14,
+        letterSpacing: 0.5,
     },
 });

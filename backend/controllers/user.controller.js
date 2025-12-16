@@ -243,8 +243,29 @@ export const syncContacts = async (req, res) => {
     }
 };
 
-// get registered contacts
+// avatar of the user
+export const getAvatar = async (req, res) => {
+    try {
+        const phone = req.params.contactPhone;
+        const user = await User.findOne({ phoneNumber: phone }).select('avatar');
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+        return res.status(200).json({
+            success: true,
+            data: {
+                avatar: user.avatar
+            }
+        });
+    } catch (error) {
 
+    }
+}
+
+// get registered contacts
 export const getRegisteredContacts = async (req, res) => {
     try {
         const userId = req.user._id;

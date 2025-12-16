@@ -19,7 +19,7 @@ const userSchema = new mongoose.Schema({
     otp: {
         type: Number,
     },
-    otpExpiry : {
+    otpExpiry: {
         type: Date,
         required: true,
     },
@@ -30,6 +30,14 @@ const userSchema = new mongoose.Schema({
     avatar: {
         type: String,
         default: ""
+    },
+    isOnline: {
+        type: Boolean,
+        default: false
+    },
+    lastSeen: {
+        type: Date,
+        default: new Date()
     }
 }, { timestamps: true });
 
