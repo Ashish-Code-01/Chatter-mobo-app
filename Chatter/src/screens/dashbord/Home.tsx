@@ -60,6 +60,11 @@ const Home = ({ navigation }: any) => {
         ]);
     };
 
+    const handleLinkDevices = () => {
+        setMenuVisible(false);
+        navigation.navigate("LinkDevicesScreen");
+    }
+
     useEffect(() => {
         const initialize = async () => {
             try {
@@ -234,7 +239,7 @@ const Home = ({ navigation }: any) => {
                             <Text style={styles.menuText}>Profile</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity style={styles.menuItem}>
+                        <TouchableOpacity style={styles.menuItem} onPress={handleLinkDevices}>
                             <Text style={styles.menuText}>Link Device</Text>
                         </TouchableOpacity>
 

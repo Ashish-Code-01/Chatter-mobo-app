@@ -38,7 +38,23 @@ const userSchema = new mongoose.Schema({
     lastSeen: {
         type: Date,
         default: new Date()
-    }
+    },
+    devices: [{
+        deviceId: {
+            type: String,
+            unique: true,
+            sparse: true
+        },
+        deviceName: String,
+        deviceModel: String,
+        osVersion: String,
+        linkedAt: Date,
+        lastActive: Date,
+        isPrimary: {
+            type: Boolean,
+            default: false
+        }
+    }]
 }, { timestamps: true });
 
 const User = mongoose.model("User", userSchema);

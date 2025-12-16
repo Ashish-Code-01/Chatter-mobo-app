@@ -7,6 +7,7 @@ import connectDB from "./lib/dbconnect.js";
 import userRoute from "./routes/user.route.js";
 import contactRoute from "./routes/contact.route.js";
 import messageRoute from "./routes/message.route.js";
+import deviceRoute from "./routes/device.route.js";
 import Message from "./models/message.model.js";
 import User from "./models/user.model.js";
 import { Server } from "socket.io";
@@ -137,6 +138,7 @@ app.get("/status", (req, res) => {
 app.use("/auth", userRoute);
 app.use("/api/contact", contactRoute);
 app.use("/api/messages", messageRoute);
+app.use("/api/devices", deviceRoute);
 
 // Get all online users
 app.get("/api/online/users", (req, res) => {
