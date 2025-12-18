@@ -16,7 +16,8 @@ import axios from 'axios'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import DeviceInfo from 'react-native-device-info'
 
-const API_URL = "http://10.73.208.98:8000"
+// const API_URL = "http://10.73.208.98:8000"
+const API_URL = "https://chatter-mobo-app.onrender.com";
 
 const LinkDevice = ({ navigation }: any) => {
     const [devices, setDevices] = useState<any[]>([])

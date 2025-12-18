@@ -652,6 +652,8 @@ p {
 .showcase {
     padding: 5rem 2rem;
     background-color: var(--bg-secondary);
+    max-width: 100%;
+    overflow: hidden;
 }
 
 .showcase-item {
@@ -661,6 +663,11 @@ p {
     grid-template-columns: 1fr 1fr;
     gap: 3rem;
     align-items: center;
+    padding: 0;
+}
+
+.showcase-item:last-child {
+    margin-bottom: 0;
 }
 
 .showcase-item.reverse {
@@ -671,14 +678,22 @@ p {
     direction: ltr;
 }
 
+.showcase-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
 .showcase-content h2 {
     margin-bottom: 1.5rem;
+    font-size: 2.2rem;
 }
 
 .showcase-content p {
     font-size: 1.05rem;
     margin-bottom: 2rem;
     color: var(--text-secondary);
+    line-height: 1.6;
 }
 
 .feature-list {
@@ -686,11 +701,17 @@ p {
     display: flex;
     flex-direction: column;
     gap: 0.8rem;
+    margin: 0;
+    padding: 0;
 }
 
 .feature-list li {
     color: var(--text-primary);
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    font-size: 1rem;
 }
 
 .showcase-image {
@@ -698,6 +719,8 @@ p {
     align-items: center;
     justify-content: center;
     height: 300px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
+    border-radius: var(--radius-lg);
 }
 
 .image-placeholder {
@@ -1027,6 +1050,7 @@ p {
         width: 100%;
         padding: 1.5rem 1rem;
         border-bottom: 1px solid var(--border-light);
+        background-color: black;
     }
 
     .nav-menu li {
@@ -1052,6 +1076,7 @@ p {
         gap: 0.5rem;
         padding: 1rem;
         width: 100%;
+        background-color: black;
     }
 
     .nav-actions button {
@@ -1137,10 +1162,31 @@ p {
         grid-template-columns: 1fr;
         gap: 1.5rem;
         direction: ltr;
+        margin-bottom: 3rem;
     }
 
     .showcase-image {
         height: 200px;
+        order: -1;
+    }
+
+    .showcase-content h2 {
+        font-size: 1.8rem;
+        margin-bottom: 1rem;
+    }
+
+    .showcase-content p {
+        font-size: 0.95rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .feature-list {
+        gap: 0.6rem;
+    }
+
+    .feature-list li {
+        font-size: 0.9rem;
+        gap: 0.6rem;
     }
 
     .image-placeholder {
@@ -1213,6 +1259,67 @@ p {
 /* Mobile Devices (480px - 767px) */
 @media (max-width: 600px) {
 
+    /* Enhanced Navbar for Small Screens */
+    .nav-container {
+        padding: 0.8rem;
+        gap: 0.5rem;
+    }
+
+    .logo {
+        font-size: 1.1rem;
+        gap: 6px;
+    }
+
+    .logo-icon {
+        font-size: 1.3rem;
+    }
+
+    .logo-text {
+        font-size: 1rem;
+    }
+
+    .hamburger {
+        gap: 4px;
+        padding: 6px;
+        margin-left: auto;
+    }
+
+    .hamburger span {
+        width: 20px;
+        height: 2px;
+    }
+
+    .nav-menu {
+        padding: 0.8rem;
+        border-bottom: none;
+    }
+
+    .nav-menu li {
+        border-bottom: 1px solid var(--border-light);
+    }
+
+    .nav-menu li:last-child {
+        border-bottom: none;
+    }
+
+    .nav-link {
+        padding: 0.8rem 0.5rem;
+        font-size: 0.95rem;
+    }
+
+    .nav-actions {
+        flex-direction: column;
+        padding: 0.8rem;
+        gap: 0.6rem;
+        border-top: 1px solid var(--border-light);
+    }
+
+    .nav-actions button {
+        padding: 11px 14px;
+        font-size: 0.85rem;
+        width: 100%;
+    }
+
     h1,
     .hero-title {
         font-size: 2rem;
@@ -1228,18 +1335,6 @@ p {
 
     p {
         font-size: 0.95rem;
-    }
-
-    .nav-container {
-        padding: 0.8rem 1rem;
-    }
-
-    .logo {
-        font-size: 1.2rem;
-    }
-
-    .logo-icon {
-        font-size: 1.5rem;
     }
 
     .hero {
@@ -1464,6 +1559,142 @@ p {
     .footer-bottom {
         font-size: 0.85rem;
         padding-top: 1.5rem;
+    }
+}
+
+/* Extra Small Devices (under 360px) */
+@media (max-width: 360px) {
+    .nav-container {
+        padding: 0.6rem 0.5rem;
+    }
+
+    .logo {
+        font-size: 1rem;
+        gap: 4px;
+    }
+
+    .logo-icon {
+        font-size: 1.1rem;
+    }
+
+    .logo-text {
+        display: none;
+    }
+
+    .hamburger span {
+        width: 18px;
+        height: 1.5px;
+    }
+
+    .nav-menu {
+        padding: 0.6rem;
+    }
+
+    .nav-link {
+        padding: 0.6rem 0.3rem;
+        font-size: 0.9rem;
+    }
+
+    .nav-actions {
+        padding: 0.6rem;
+        gap: 0.4rem;
+    }
+
+    .nav-actions button {
+        padding: 10px 12px;
+        font-size: 0.8rem;
+    }
+
+    h1,
+    .hero-title {
+        font-size: 1.6rem;
+        margin-bottom: 1rem;
+    }
+
+    h2 {
+        font-size: 1.3rem;
+    }
+
+    h3 {
+        font-size: 1.1rem;
+    }
+
+    p {
+        font-size: 0.9rem;
+    }
+
+    .hero-buttons button {
+        padding: 10px 12px;
+        font-size: 0.85rem;
+    }
+
+    .hero-stats {
+        gap: 0.5rem;
+    }
+
+    .stat {
+        min-width: 70px;
+    }
+
+    .stat-number {
+        font-size: 1rem;
+    }
+
+    .stat-label {
+        font-size: 0.65rem;
+    }
+
+    .feature-icon {
+        font-size: 1.8rem;
+    }
+
+    .feature-card p,
+    .why-card p {
+        font-size: 0.85rem;
+    }
+
+    .showcase {
+        padding: 1.5rem 0.8rem;
+    }
+
+    .showcase-item {
+        margin-bottom: 1.5rem;
+    }
+
+    .showcase-content h2 {
+        font-size: 1.2rem;
+        margin-bottom: 0.8rem;
+    }
+
+    .showcase-content p {
+        font-size: 0.85rem;
+        margin-bottom: 0.8rem;
+    }
+
+    .feature-list li {
+        font-size: 0.8rem;
+    }
+
+    .image-placeholder {
+        font-size: 2.5rem;
+    }
+
+    .showcase-image {
+        height: 180px;
+        border-radius: var(--radius-md);
+    }
+
+    .testimonial-card p {
+        font-size: 0.8rem;
+    }
+
+    .cta h2 {
+        font-size: 1.4rem;
+    }
+
+    .cta .btn-primary {
+        padding: 10px 14px;
+        font-size: 0.85rem;
     }
 }
 

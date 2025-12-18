@@ -15,8 +15,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { io } from "socket.io-client";
 
-const API_URL = "http://10.73.208.98:8000"; // Update this for production
-// const API_URL = "https://chatter-mobo-app.onrender.com";
+// const API_URL = "http://10.73.208.98:8000"; // Update this for production
+const API_URL = "https://chatter-mobo-app.onrender.com";
 
 const socket = io(API_URL);
 

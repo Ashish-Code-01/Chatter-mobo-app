@@ -47,42 +47,47 @@ function initializeNavigation() {
 
 function initializeHamburger() {
     const hamburger = document.querySelector('.hamburger');
-    const navMenu = document.querySelector('.nav-menu');
-    const navActions = document.querySelector('.nav-actions');
+    const navWrapper = document.querySelector('.nav-wrapper');
+    const navLinks = document.querySelectorAll('.nav-link');
 
-    if (!hamburger) return;
+    if (!hamburger || !navWrapper) return;
 
-    hamburger.addEventListener('click', function () {
-        if (navMenu.style.display === 'flex') {
-            navMenu.style.display = 'none';
-            navActions.style.display = 'none';
-        } else {
-            navMenu.style.display = 'flex';
-            navMenu.style.flexDirection = 'column';
-            navMenu.style.position = 'absolute';
-            navMenu.style.top = '100%';
-            navMenu.style.left = '0';
-            navMenu.style.right = '0';
-            navMenu.style.backgroundColor = 'white';
-            navMenu.style.padding = '1rem 2rem';
-            navMenu.style.borderBottom = '1px solid var(--border)';
-            navMenu.style.gap = '1rem';
-            navActions.style.display = 'flex';
-            navActions.style.position = 'absolute';
-            navActions.style.top = '100%';
-            navActions.style.left = '0';
-            navActions.style.right = '0';
-            navActions.style.padding = '1rem 2rem';
-            navActions.style.borderTop = '1px solid var(--border)';
-            navActions.style.flexDirection = 'column';
-        }
+    // Toggle menu on hamburger click
+    hamburger.addEventListener('click', function (e) {
+        e.stopPropagation();
+        hamburger.classList.toggle('active');
+        navWrapper.classList.toggle('active');
+    });
+
+    // Close menu when clicking on a link
+    navLinks.forEach(link => {
+        link.addEventListener('click', () => {
+            hamburger.classList.remove('active');
+            navWrapper.classList.remove('active');
+        });
     });
 
     // Close menu when clicking outside
     document.addEventListener('click', function (e) {
         if (!e.target.closest('.navbar')) {
-            navMenu.style.display = 'none';
-            navActions.style.display = 'none';
+            hamburger.classList.remove('active');
+            navWrapper.classList.remove('active');
+        }
+    });
+
+    // Close menu on escape key
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            hamburger.classList.remove('active');
+            navWrapper.classList.remove('active');
+        }
+    });
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+            hamburger.classList.remove('active');
+            navWrapper.classList.remove('active');
         }
     });
 }
@@ -245,55 +250,10 @@ function animateValue(element, start, end, duration) {
 window.addEventListener('load', animateCounters);
 
 // ============================================
-// RESPONSIVE MENU BEHAVIOR
+// RESPONSIVE MENU BEHAVIOR - HANDLED IN CSS
 // ============================================
-
-function checkMobileMenu() {
-    const navMenu = document.querySelector('.nav-menu');
-    const navActions = document.querySelector('.nav-actions');
-    const hamburger = document.querySelector('.hamburger');
-
-    if (window.innerWidth <= 768) {
-        // Mobile: Hide menu by default
-        if (navMenu) {
-            navMenu.classList.remove('active');
-            navMenu.style.display = 'none';
-        }
-        if (navActions) {
-            navActions.classList.remove('active');
-            navActions.style.display = 'none';
-        }
-        if (hamburger) {
-            hamburger.style.display = 'flex';
-        }
-    } else {
-        // Desktop: Show menu
-        if (navMenu) {
-            navMenu.style.display = 'flex';
-            navMenu.style.position = 'static';
-            navMenu.style.backgroundColor = 'transparent';
-            navMenu.style.padding = '0';
-            navMenu.style.border = 'none';
-            navMenu.style.flexDirection = 'row';
-            navMenu.style.gap = '2rem';
-        }
-        if (navActions) {
-            navActions.style.display = 'flex';
-            navActions.style.position = 'static';
-            navActions.style.padding = '0';
-            navActions.style.border = 'none';
-            navActions.style.gap = '1rem';
-            navActions.style.flexDirection = 'row';
-        }
-        if (hamburger) {
-            hamburger.style.display = 'none';
-        }
-    }
-}
-
-window.addEventListener('resize', checkMobileMenu);
-window.addEventListener('orientationchange', checkMobileMenu);
-checkMobileMenu();
+// Menu state is now controlled entirely through CSS and classes
+// No inline styles needed!
 
 // ============================================
 // SCROLL TO TOP BUTTON
