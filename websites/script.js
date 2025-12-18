@@ -103,8 +103,17 @@ function initializeButtons() {
         button.addEventListener('click', function () {
             const text = this.textContent.toLowerCase();
 
-            if (text.includes('download') || text.includes('demo')) {
-                showNotification('Feature coming soon! We\'re preparing for launch.', 'info');
+            if (text.includes('download')) {
+                // Create a temporary link element to trigger download
+                const link = document.createElement('a');
+                link.href = './app-release.apk';
+                link.download = 'Chatter-App.apk';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showNotification('Download started! 📱', 'success');
+            } else if (text.includes('demo')) {
+                showNotification('Feature coming soon! We\'re preparing the demo.', 'info');
             }
         });
     });
@@ -233,14 +242,15 @@ function animateValue(element, start, end, duration) {
     const range = end - start;
     const increment = range / (duration / 16);
     let current = start;
+    const originalText = element.textContent;
+    const suffix = originalText.replace(/\d/g, '');
 
     const timer = setInterval(() => {
         current += increment;
         if (current >= end) {
-            element.textContent = end + (element.textContent.includes('+') ? '+' : '');
+            element.textContent = end + suffix;
             clearInterval(timer);
         } else {
-            const suffix = element.textContent.includes('+') ? '+' : '';
             element.textContent = Math.floor(current) + suffix;
         }
     }, 16);
