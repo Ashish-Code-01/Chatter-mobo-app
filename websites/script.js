@@ -1,0 +1,437 @@
+// ============================================
+// CHATTER LANDING PAGE - INTERACTIVITY
+// ============================================
+
+// Smooth scroll behavior for anchor links
+document.addEventListener('DOMContentLoaded', function () {
+    initializeNavigation();
+    initializeScrollAnimations();
+    initializeButtons();
+    initializeHamburger();
+    initializeIntersectionObserver();
+});
+
+// ============================================
+// NAVIGATION FUNCTIONALITY
+// ============================================
+
+function initializeNavigation() {
+    const navLinks = document.querySelectorAll('.nav-link');
+
+    navLinks.forEach(link => {
+        link.addEventListener('click', function (e) {
+            e.preventDefault();
+            const targetId = this.getAttribute('href');
+            const targetElement = document.querySelector(targetId);
+
+            if (targetElement) {
+                const offsetTop = targetElement.offsetTop - 80;
+                window.scrollTo({
+                    top: offsetTop,
+                    behavior: 'smooth'
+                });
+
+                // Close mobile menu if open
+                const navMenu = document.querySelector('.nav-menu');
+                if (navMenu.style.display === 'flex') {
+                    navMenu.style.display = 'none';
+                }
+            }
+        });
+    });
+}
+
+// ============================================
+// HAMBURGER MENU
+// ============================================
+
+function initializeHamburger() {
+    const hamburger = document.querySelector('.hamburger');
+    const navMenu = document.querySelector('.nav-menu');
+    const navActions = document.querySelector('.nav-actions');
+
+    if (!hamburger) return;
+
+    hamburger.addEventListener('click', function () {
+        if (navMenu.style.display === 'flex') {
+            navMenu.style.display = 'none';
+            navActions.style.display = 'none';
+        } else {
+            navMenu.style.display = 'flex';
+            navMenu.style.flexDirection = 'column';
+            navMenu.style.position = 'absolute';
+            navMenu.style.top = '100%';
+            navMenu.style.left = '0';
+            navMenu.style.right = '0';
+            navMenu.style.backgroundColor = 'white';
+            navMenu.style.padding = '1rem 2rem';
+            navMenu.style.borderBottom = '1px solid var(--border)';
+            navMenu.style.gap = '1rem';
+            navActions.style.display = 'flex';
+            navActions.style.position = 'absolute';
+            navActions.style.top = '100%';
+            navActions.style.left = '0';
+            navActions.style.right = '0';
+            navActions.style.padding = '1rem 2rem';
+            navActions.style.borderTop = '1px solid var(--border)';
+            navActions.style.flexDirection = 'column';
+        }
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('.navbar')) {
+            navMenu.style.display = 'none';
+            navActions.style.display = 'none';
+        }
+    });
+}
+
+// ============================================
+// BUTTON INTERACTIONS
+// ============================================
+
+function initializeButtons() {
+    const downloadButtons = document.querySelectorAll('.btn-primary, .btn-outline');
+
+    downloadButtons.forEach(button => {
+        button.addEventListener('click', function () {
+            const text = this.textContent.toLowerCase();
+
+            if (text.includes('download') || text.includes('demo')) {
+                showNotification('Feature coming soon! We\'re preparing for launch.', 'info');
+            }
+        });
+    });
+
+    // Add ripple effect to buttons
+    const buttons = document.querySelectorAll('button');
+    buttons.forEach(button => {
+        button.addEventListener('mouseenter', function () {
+            this.style.cursor = 'pointer';
+        });
+    });
+}
+
+// ============================================
+// SCROLL ANIMATIONS
+// ============================================
+
+function initializeScrollAnimations() {
+    const elements = document.querySelectorAll('.feature-card, .why-card, .testimonial-card, .showcase-item');
+
+    elements.forEach((element, index) => {
+        element.style.opacity = '0';
+        element.style.animation = `fadeInUp 0.6s ease-out ${index * 0.1}s forwards`;
+    });
+}
+
+// ============================================
+// INTERSECTION OBSERVER
+// ============================================
+
+function initializeIntersectionObserver() {
+    const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+    };
+
+    const observer = new IntersectionObserver(function (entries) {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('fade-in-up');
+                observer.unobserve(entry.target);
+            }
+        });
+    }, observerOptions);
+
+    // Observe all animatable elements
+    const animatableElements = document.querySelectorAll('.feature-card, .why-card, .testimonial-card, .showcase-item');
+    animatableElements.forEach(element => observer.observe(element));
+}
+
+// ============================================
+// NOTIFICATION SYSTEM
+// ============================================
+
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 500;
+        z-index: 10000;
+        animation: slideInRight 0.3s ease-out;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    `;
+
+    const bgColor = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6';
+    notification.style.backgroundColor = bgColor;
+    notification.style.color = 'white';
+    notification.textContent = message;
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.animation = 'fadeOut 0.3s ease-out';
+        notification.style.opacity = '0';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+// ============================================
+// SCROLL EFFECT - NAVBAR
+// ============================================
+
+window.addEventListener('scroll', function () {
+    const navbar = document.querySelector('.navbar');
+    if (window.scrollY > 10) {
+        navbar.style.boxShadow = 'var(--shadow-md)';
+    } else {
+        navbar.style.boxShadow = 'var(--shadow-sm)';
+    }
+});
+
+// ============================================
+// COUNTER ANIMATION FOR STATS
+// ============================================
+
+function animateCounters() {
+    const stats = document.querySelectorAll('.stat-number');
+
+    const observerOptions = {
+        threshold: 0.5
+    };
+
+    const observer = new IntersectionObserver(function (entries) {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const element = entry.target;
+                const finalValue = element.textContent;
+                const numericValue = parseInt(finalValue);
+
+                if (!isNaN(numericValue)) {
+                    animateValue(element, 0, numericValue, 2000);
+                }
+                observer.unobserve(element);
+            }
+        });
+    }, observerOptions);
+
+    stats.forEach(stat => observer.observe(stat));
+}
+
+function animateValue(element, start, end, duration) {
+    const range = end - start;
+    const increment = range / (duration / 16);
+    let current = start;
+
+    const timer = setInterval(() => {
+        current += increment;
+        if (current >= end) {
+            element.textContent = end + (element.textContent.includes('+') ? '+' : '');
+            clearInterval(timer);
+        } else {
+            const suffix = element.textContent.includes('+') ? '+' : '';
+            element.textContent = Math.floor(current) + suffix;
+        }
+    }, 16);
+}
+
+// Initialize counter animation
+window.addEventListener('load', animateCounters);
+
+// ============================================
+// RESPONSIVE MENU BEHAVIOR
+// ============================================
+
+function checkMobileMenu() {
+    const navMenu = document.querySelector('.nav-menu');
+    const navActions = document.querySelector('.nav-actions');
+    const hamburger = document.querySelector('.hamburger');
+
+    if (window.innerWidth <= 768) {
+        // Mobile: Hide menu by default
+        if (navMenu) {
+            navMenu.classList.remove('active');
+            navMenu.style.display = 'none';
+        }
+        if (navActions) {
+            navActions.classList.remove('active');
+            navActions.style.display = 'none';
+        }
+        if (hamburger) {
+            hamburger.style.display = 'flex';
+        }
+    } else {
+        // Desktop: Show menu
+        if (navMenu) {
+            navMenu.style.display = 'flex';
+            navMenu.style.position = 'static';
+            navMenu.style.backgroundColor = 'transparent';
+            navMenu.style.padding = '0';
+            navMenu.style.border = 'none';
+            navMenu.style.flexDirection = 'row';
+            navMenu.style.gap = '2rem';
+        }
+        if (navActions) {
+            navActions.style.display = 'flex';
+            navActions.style.position = 'static';
+            navActions.style.padding = '0';
+            navActions.style.border = 'none';
+            navActions.style.gap = '1rem';
+            navActions.style.flexDirection = 'row';
+        }
+        if (hamburger) {
+            hamburger.style.display = 'none';
+        }
+    }
+}
+
+window.addEventListener('resize', checkMobileMenu);
+window.addEventListener('orientationchange', checkMobileMenu);
+checkMobileMenu();
+
+// ============================================
+// SCROLL TO TOP BUTTON
+// ============================================
+
+function createScrollToTopButton() {
+    const button = document.createElement('button');
+    button.textContent = '↑';
+    button.style.cssText = `
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: white;
+        border: none;
+        cursor: pointer;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        z-index: 999;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+        transition: all 0.3s ease;
+    `;
+
+    button.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    window.addEventListener('scroll', () => {
+        if (window.scrollY > 300) {
+            button.style.display = 'flex';
+        } else {
+            button.style.display = 'none';
+        }
+    });
+
+    document.body.appendChild(button);
+}
+
+createScrollToTopButton();
+
+// ============================================
+// MOUSE TRACKING EFFECT FOR HERO
+// ============================================
+
+function initializeMouseTracking() {
+    const heroBg = document.querySelector('.hero-bg');
+    if (!heroBg) return;
+
+    document.addEventListener('mousemove', (e) => {
+        const x = (e.clientX / window.innerWidth) * 100;
+        const y = (e.clientY / window.innerHeight) * 100;
+
+        heroBg.style.transform = `translate(${x * 0.01}px, ${y * 0.01}px)`;
+    });
+}
+
+initializeMouseTracking();
+
+// ============================================
+// KEYBOARD SHORTCUTS
+// ============================================
+
+document.addEventListener('keydown', (e) => {
+    // Press '/' to focus search or navigation
+    if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        document.querySelector('.nav-menu a')?.focus();
+    }
+
+    // Press 'Escape' to close mobile menu
+    if (e.key === 'Escape') {
+        const navMenu = document.querySelector('.nav-menu');
+        if (navMenu && navMenu.style.display === 'flex') {
+            navMenu.style.display = 'none';
+        }
+    }
+});
+
+// ============================================
+// PERFORMANCE - LAZY LOADING
+// ============================================
+
+if ('IntersectionObserver' in window) {
+    const images = document.querySelectorAll('img[data-src]');
+    const imageObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const img = entry.target;
+                img.src = img.dataset.src;
+                img.removeAttribute('data-src');
+                imageObserver.unobserve(img);
+            }
+        });
+    });
+
+    images.forEach(img => imageObserver.observe(img));
+}
+
+// ============================================
+// FORM HANDLING (if needed in future)
+// ============================================
+
+function handleFormSubmit(formId, callback) {
+    const form = document.getElementById(formId);
+    if (!form) return;
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        // Add form handling logic here
+        showNotification('Thank you! We\'ll be in touch soon.', 'success');
+        if (callback) callback();
+    });
+}
+
+// ============================================
+// PAGE LOAD ANIMATIONS
+// ============================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Fade in body
+    document.body.style.animation = 'fadeInUp 0.5s ease-out';
+
+    // Stagger animations for nav items
+    const navItems = document.querySelectorAll('.nav-link, .nav-actions button');
+    navItems.forEach((item, index) => {
+        item.style.animation = `fadeInUp 0.5s ease-out ${index * 0.1 + 0.1}s backwards`;
+    });
+});
+
+// ============================================
+// CONSOLE MESSAGE
+// ============================================
+
+console.log('%cWelcome to Chatter! 👋', 'font-size: 20px; color: #6366f1; font-weight: bold;');
+console.log('%cJoin thousands of users enjoying real-time messaging.', 'font-size: 14px; color: #8b5cf6;');
+console.log('%cVisit: https://chatter-mobo-app.onrender.com', 'font-size: 12px; color: #666;');
