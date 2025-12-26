@@ -53,8 +53,7 @@ export const loginUser = async (req, res) => {
 
         return res.status(500).json({
             success: false,
-            message: "An error occurred while processing your request",
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            message: "An error occurred while processing your request",f
         });
     }
 };
