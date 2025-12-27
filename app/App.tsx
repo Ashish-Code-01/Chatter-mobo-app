@@ -16,7 +16,7 @@ import EditDetailsScreen from './src/screens/auth/EditDetails';
 import HomeScreen from './src/screens/dashbord/Home';
 import AddContact from './src/screens/dashbord/AddContact';
 import ChatToContact from './src/screens/dashbord/chatToContact';
-import updateUserDetails from './src/screens/update/updateUserDetails'
+import updateUserDetails from './src/screens/auth/updateUserDetails'
 import LinkDevicesScreen from './src/screens/dashbord/linkdevice'
 
 const Stack = createNativeStackNavigator();

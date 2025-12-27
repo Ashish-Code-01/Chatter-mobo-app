@@ -62,7 +62,7 @@ const EditDetails = ({ navigation }: any) => {
             throw error;
         }
     };
-    
+
 
     const handleSave = async () => {
         if (!name.trim()) {
@@ -91,9 +91,11 @@ const EditDetails = ({ navigation }: any) => {
             );
 
             if (response.data.success) {
+                await AsyncStorage.setItem("User", response.data.user);
                 Alert.alert('Success', 'Profile updated successfully', [
                     { text: 'OK', onPress: () => navigation.navigate('home') },
                 ]);
+
             } else {
                 Alert.alert('Error', response.data.message || 'Failed to update profile');
             }

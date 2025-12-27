@@ -17,7 +17,6 @@ import axios from "axios";
 
 // Configuration
 const API_URL = "https://chatter-mobo-app.onrender.com";
-// const API_URL = "http://10.73.208.98:8000"; // Uncomment for local dev
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dqmxpgv5k/image/upload/v1765892967/A_circular_default_c_cafouy.png";
 
 interface Message {
