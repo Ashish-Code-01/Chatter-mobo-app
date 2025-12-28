@@ -13,10 +13,13 @@ import {
 } from "react-native";
 import { io, Socket } from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Alert } from "react-native";
+import { pick, types } from '@react-native-documents/picker';
 import axios from "axios";
 
 // Configuration
-const API_URL = "https://chatter-mobo-app.onrender.com";
+const API_URL = "http://172.20.5.98:8000"; // Update this for production
+// const API_URL = "https://chatter-mobo-app.onrender.com";
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dqmxpgv5k/image/upload/v1765892967/A_circular_default_c_cafouy.png";
 
 interface Message {
@@ -30,7 +33,7 @@ interface RouteParams {
     contactPhone: string;
 }
 
-export default function ChatToContact({ route }: { route: { params: RouteParams } }) {
+export default function ChatToContact({ route, navigation }: { route: { params: RouteParams }, navigation: any }) {
     const { myPhone, contactPhone } = route.params;
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
@@ -38,6 +41,7 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
     const [secretKey, setSecretKey] = useState<string>("");
     const [contactIsOnline, setContactIsOnline] = useState(false);
     const [contactAvatar, setContactAvatar] = useState<string>("");
+    const [uploading, setUploading] = useState(false);
 
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!'_-&@#$%*()/:<>|+= ";
 
@@ -162,6 +166,8 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
             transports: ["websocket"],
             reconnection: true,
         });
+
+        socketRef.current.emit("register", myPhone);
 
 
         // Listen for online status changes
@@ -399,7 +405,7 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
                 from: myPhone,
                 to: contactPhone,
                 message: encryptedMsg,
-                publickey: publickey,  // Always send public key portion
+                publickey: publickey,
             });
 
             console.log("Message sent encrypted:", {
@@ -412,6 +418,73 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
         } catch (error) {
             console.error("Error sending message:", error);
             Alert.alert("Error", "Failed to send message");
+        }
+    };
+
+
+    const handleAttachDocument = async () => {
+        try {
+            const results = await pick({
+                type: [types.allFiles],
+                allowMultiSelection: true,
+            });
+
+            console.log(`Selected ${results.length} file(s)`);
+
+            const maxSize = 10 * 1024 * 1024;
+            const oversizedFiles = results.filter(file => file.size && file.size > maxSize);
+
+            if (oversizedFiles.length > 0) {
+                Alert.alert('Error', `${oversizedFiles.length} file(s) exceed 10MB limit`);
+                return;
+            }
+
+            // Show loading indicator
+            Alert.alert('Uploading', 'Please wait...');
+
+            const uploadPromises = results.map(async (file) => {
+                const fileurl = await uploadDocumentToCloudinary(file.uri, file.type, file.name);
+                return { file, fileurl };
+            });
+
+            const uploadedFiles = await Promise.all(uploadPromises);
+
+            // Navigate to preview screen
+            navigation.navigate('PreviewDocuments', {
+                uploadedFiles,
+                myPhone,
+                contactPhone,
+                socketRef: socketRef.current,
+            });
+
+        } catch (err: any) {
+            if (err?.code !== 'DOCUMENT_PICKER_CANCELED') {
+                console.error('Error picking document:', err);
+                Alert.alert('Error', 'Failed to attach documents');
+            }
+        }
+    };
+
+
+    const uploadDocumentToCloudinary = async (imageUri: string, filetype: string, filename: string) => {
+        try {
+            const formData = new FormData();
+            formData.append('file', {
+                uri: imageUri,
+                type: filetype,
+                name: filename,
+            } as any);
+            formData.append('upload_preset', 'chatter_unsigned');
+
+            const response = await axios.post(
+                'https://api.cloudinary.com/v1_1/dqmxpgv5k/image/upload',
+                formData,
+                { headers: { 'Content-Type': 'multipart/form-data' } }
+            );
+            return response.data.secure_url;
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            throw error;
         }
     };
 
@@ -482,6 +555,17 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
             )}
 
             <View style={styles.inputRow}>
+                <TouchableOpacity
+                    style={styles.attachButton}
+                    onPress={handleAttachDocument}
+                >
+                    <Image
+                        source={require('../../assets/attach.png')}
+                        style={styles.sendicon}
+                        color="red"
+                    />
+                </TouchableOpacity>
+
                 <TextInput
                     style={styles.input}
                     placeholder="Type a message..."
@@ -491,12 +575,19 @@ export default function ChatToContact({ route }: { route: { params: RouteParams 
                     multiline
                     maxLength={1000}
                 />
+
                 <TouchableOpacity
-                    style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
+                    style={[
+                        styles.sendButton,
+                        !message.trim() && styles.sendButtonDisabled,
+                    ]}
                     disabled={!message.trim()}
                     onPress={handleSend}
                 >
-                    <Text style={styles.sendText}>Send</Text>
+                    <Image
+                        source={require('../../assets/send.png')}
+                        style={styles.sendicon}
+                    />
                 </TouchableOpacity>
             </View>
         </KeyboardAvoidingView>
@@ -681,12 +772,15 @@ const styles = StyleSheet.create({
     sendButtonDisabled: {
         backgroundColor: "rgba(255, 255, 255, 0.15)",
         shadowOpacity: 0,
+        tintColor: "#6B6B8A",
     },
 
-    sendText: {
-        color: "#0F1419",
-        fontWeight: "700",
-        fontSize: 14,
-        letterSpacing: 0.5,
+    sendicon: {
+        width: 22,
+        height: 22,
+    },
+    attachButton: {
+        padding: 8,
+        justifyContent: 'flex-end',
     },
 });

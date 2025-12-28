@@ -17,7 +17,8 @@ import HomeScreen from './src/screens/dashbord/Home';
 import AddContact from './src/screens/dashbord/AddContact';
 import ChatToContact from './src/screens/dashbord/chatToContact';
 import updateUserDetails from './src/screens/auth/updateUserDetails'
-import LinkDevicesScreen from './src/screens/dashbord/linkdevice'
+import LinkDevicesScreen from './src/screens/dashbord/linkdevice';
+import PreviewDocuments from './src/screens/dashbord/previewDocs';
 
 const Stack = createNativeStackNavigator();
 export default function App() {
@@ -54,6 +55,7 @@ export default function App() {
         <Stack.Screen name="ChatToContact" component={ChatToContact} options={{ headerShown: false }} />
         <Stack.Screen name="updateUserDetails" component={updateUserDetails} options={{ headerShown: false }} />
         <Stack.Screen name="LinkDevicesScreen" component={LinkDevicesScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="PreviewDocuments" component={PreviewDocuments} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

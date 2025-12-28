@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import http from "http";
-// import morgan from "morgan"; // for development mode only
+import morgan from "morgan"; // for development mode only
 import connectDB from "./lib/dbconnect.js";
 import userRoute from "./routes/user.route.js";
 import contactRoute from "./routes/contact.route.js";
@@ -130,7 +130,8 @@ app.use(express.json({ limit: "10240mb" }));
 connectDB();
 
 app.get("/", (req, res) => {
-    res.send("API is running...");
+    // res.send("API is running...");
+    res.send(connectedUsers)
 });
 app.get("/status", (req, res) => {
     res.send({ status: "OK", timestamp: new Date() });
