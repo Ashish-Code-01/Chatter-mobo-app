@@ -26,6 +26,7 @@ interface Message {
     from: string;
     message: string;
     timestamp: number;
+    file?: any;
 }
 
 interface RouteParams {
@@ -41,7 +42,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
     const [secretKey, setSecretKey] = useState<string>("");
     const [contactIsOnline, setContactIsOnline] = useState(false);
     const [contactAvatar, setContactAvatar] = useState<string>("");
-    const [uploading, setUploading] = useState(false);
+
 
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!'_-&@#$%*()/:<>|+= ";
 
@@ -177,21 +178,19 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
             }
         });
 
-        socketRef.current.on("receiveMessage", async ({ from, message: encryptedMsg, publickey }: { from: string; message: string; publickey: string }) => {
+        socketRef.current.on("receiveMessage", async ({ from, message: encryptedMsg, publickey, files }: { from: string; message: string; publickey: string, files: [] }) => {
             try {
-                // Only process messages from the contact, not from ourselves
                 if (from === myPhone) {
-                    return; // Skip our own messages from socket
+                    return;
                 }
 
-                // Get our stored secret key
+\\
                 let keyToUse = secretKey;
 
                 if (!keyToUse) {
-                    // Try to derive key from the public key sent by sender
+
                     const privatekey = await AsyncStorage.getItem("privatekey");
                     if (publickey && privatekey) {
-                        // Combine sender's public key (first 16 chars of their private) with our private key
                         keyToUse = publickey + privatekey;
                         console.log("Derived key from public key + our private key");
                     } else {
@@ -216,18 +215,28 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                     setSecretKey(keyToUse);
                 }
 
+                if (files) {
+
+                    const newMsg: Message = {
+                        from: from,
+                        message: decryptedMsg,
+                        timestamp: Date.now(),
+                        file: files,
+                    };
+
+                    setMessages((prev) => {
+                        const merged = dedupeMessages([...prev, newMsg]);
+                        AsyncStorage.setItem(chatId, JSON.stringify(merged));
+                        return merged;
+                    });
+                    return;
+                }
+
                 const newMsg: Message = {
                     from: from,
                     message: decryptedMsg,
                     timestamp: Date.now(),
                 };
-
-                console.log("Message received and decrypted:", {
-                    from: from,
-                    encrypted: encryptedMsg,
-                    decrypted: decryptedMsg,
-                    keyUsed: keyToUse
-                });
 
                 setMessages((prev) => {
                     const merged = dedupeMessages([...prev, newMsg]);
@@ -257,7 +266,6 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                     setMessages(JSON.parse(local));
                 }
 
-                // Fetch initial online status of contact
                 await fetchContactStatus();
                 await fetchContactAvatar();
 
@@ -293,12 +301,10 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
             if (response.data?.success && response.data?.data?.avatar) {
                 setContactAvatar(response.data.data.avatar);
             } else {
-                // Use default avatar if none found
                 setContactAvatar(DEFAULT_AVATAR);
             }
         } catch (error) {
             console.error("Error fetching contact avatar:", error);
-            // Use default avatar on error
             setContactAvatar(DEFAULT_AVATAR);
         }
     };
@@ -320,9 +326,8 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
 
             const backendMsgs: Message[] = raw.map((msg: any) => {
                 try {
-                    // FIX: Decrypt using secretkey (derived from own privatekey + contact's publickey)
-                    // Do NOT use msg.Publickey for decryption
                     const decryptedContent = decryptMessage(msg.content, secretkey);
+
                     return {
                         from: msg.sender === myPhone ? "Me" : msg.sender,
                         message: decryptedContent,
@@ -357,7 +362,6 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
 
             let keyToUse = secretKey;
 
-            // Fallback if secret key not available
             if (!keyToUse) {
                 const privatekey = await AsyncStorage.getItem("privatekey");
                 const serverkey = await AsyncStorage.getItem("serverkey");
@@ -381,7 +385,6 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                 timestamp: timestamp,
             };
 
-            // Clear input and update UI immediately
             setMessage("");
             setMessages((prev) => {
                 const updated = [...prev, newMsg];
@@ -389,30 +392,20 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                 return updated;
             });
 
-            // Encrypt message using the encryption key
             const encryptedMsg = encryptMessage(text, keyToUse);
 
             if (!encryptedMsg || encryptedMsg === text) {
                 console.warn("Message encryption may have failed");
             }
 
-            // Get public key (first 16 characters of privatekey) to send to receiver
-            // The receiver will combine this with their privatekey to derive same decryption key
             const publickey = keyToUse.substring(0, 16);
 
-            // Send via socket with encrypted message and public key
             socketRef.current?.emit("sendMessage", {
                 from: myPhone,
                 to: contactPhone,
                 message: encryptedMsg,
+                file: "",
                 publickey: publickey,
-            });
-
-            console.log("Message sent encrypted:", {
-                original: text,
-                encrypted: encryptedMsg,
-                publickey: publickey,
-                keyUsed: keyToUse
             });
 
         } catch (error) {

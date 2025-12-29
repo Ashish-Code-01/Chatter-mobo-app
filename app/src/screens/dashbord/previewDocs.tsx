@@ -11,6 +11,9 @@ import {
     TextInput,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { io } from 'socket.io-client';
+const API_URL = "http://172.20.5.98:8000"; // Update this for production
+// const API_URL = "https://chatter-mobo-app.onrender.com";
 
 interface UploadedFile {
     file: {
@@ -93,17 +96,32 @@ const DocumentPreviewScreen = () => {
         try {
             setSending(true);
 
+            // Prepare files data - send only the necessary info
+            const filesData = files.map(file => ({
+                name: file.file.name,
+                type: file.file.type,
+                size: file.file.size,
+                url: file.fileurl,
+            }));
+
             // Prepare message payload
             const messagePayload = {
                 from: myPhone,
                 to: contactPhone,
-                files: files,
+                files: filesData,
                 message: message.trim(),
                 publickey: publickey || '',
             };
 
             // Send via socket
-            socketRef.current?.emit("sendMessage", messagePayload);
+            socketRef.current = io(API_URL, {
+                transports: ["websocket"],
+                reconnection: true,
+            });
+            socketRef.current?.emit("register", myPhone);
+            socketRef.current?.emit('sendMessage', messagePayload);
+            // console.log("messagePayload : ", messagePayload);
+
 
             setSending(false);
 

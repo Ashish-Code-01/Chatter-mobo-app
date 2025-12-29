@@ -53,11 +53,11 @@ io.on("connection", (socket) => {
     });
 
     // Send message to another user
-    socket.on("sendMessage", ({ from, to, message, publickey }) => {
-        console.log(`Message from ${from} to ${to} - Encrypted: ${message.substring(0, 20)}...`);
+    socket.on("sendMessage", ({ from, to, message, publickey, files }) => {
+        console.log(`Message from ${from} to ${to} - Encrypted: ${message.substring(0, 20)}... || File: ${files ? 'Yes' : 'No'}`);
 
         // Validate message is not empty
-        if (!message || !from || !to) {
+        if (!from || !to) {
             console.error("Invalid message data");
             return;
         }
@@ -67,7 +67,8 @@ io.on("connection", (socket) => {
             // Receiver is online - send encrypted message directly
             io.to(receiverSocketId).emit("receiveMessage", {
                 from,
-                message,  // Already encrypted
+                message,
+                files: files || null,
                 publickey: publickey || ""
             });
             console.log(`Message delivered to online receiver: ${to}`);
@@ -78,6 +79,7 @@ io.on("connection", (socket) => {
                 sender: from,
                 receiver: to,
                 content: message,  // Store encrypted content
+                file: files || null,
                 Publickey: publickey || "",  // Store public key for decryption
                 timestamp: new Date()
             }).catch(err => {

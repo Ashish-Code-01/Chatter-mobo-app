@@ -13,10 +13,13 @@ const messageSchema = new mongoose.Schema({
     },
     content: {
         type: String,
-        required: true,
     },
     Publickey: {
         type: String,
+    },
+    file: {
+        type: [],
+        default: null,
     },
     seen: {
         type: Boolean,
