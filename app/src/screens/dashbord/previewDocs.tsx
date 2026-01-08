@@ -143,7 +143,7 @@ const DocumentPreviewScreen = () => {
             // Create message object to save locally
             const newMsg: Message = {
                 from: "Me",
-                message: message.trim() || `Sent ${files.length} document(s)`,
+                message: message.trim() || "",
                 timestamp: timestamp,
                 files: filesData,
             };
@@ -162,7 +162,6 @@ const DocumentPreviewScreen = () => {
                 // Save back to AsyncStorage
                 await AsyncStorage.setItem(chatId, JSON.stringify(updatedMessages));
 
-                console.log('Message saved to AsyncStorage:', newMsg);
             } catch (storageError) {
                 console.error('Error saving to AsyncStorage:', storageError);
             }
