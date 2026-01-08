@@ -135,11 +135,6 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
 
     // Decrypt Message
     const decryptMessage = (encryptedText: string, key: string): string => {
-        if (!encryptedText || !key) {
-            console.error("Encrypted text or key is missing for decryption");
-            return encryptedText || "";
-        }
-
         let decryptedText = "";
 
         for (let i = 0; i < encryptedText.length; i++) {
@@ -178,13 +173,14 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
             }
         });
 
-        socketRef.current.on("receiveMessage", async ({ from, message: encryptedMsg, publickey, files }: { from: string; message: string; publickey: string, files: [] }) => {
+        socketRef.current.on("Receivemessage", async ({ from, message: encryptedMsg, publickey, files }: { from: string; message: string; publickey: string, files: [] }) => {
+
+            console.log(`this msg is from ${from} with public key ${publickey}: ${encryptedMsg}`);
             try {
                 if (from === myPhone) {
                     return;
                 }
 
-\\
                 let keyToUse = secretKey;
 
                 if (!keyToUse) {
@@ -192,7 +188,6 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                     const privatekey = await AsyncStorage.getItem("privatekey");
                     if (publickey && privatekey) {
                         keyToUse = publickey + privatekey;
-                        console.log("Derived key from public key + our private key");
                     } else {
                         const serverkey = await AsyncStorage.getItem("serverkey");
                         if (privatekey && serverkey) {
@@ -420,6 +415,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
             const results = await pick({
                 type: [types.allFiles],
                 allowMultiSelection: true,
+                quality: 1,
             });
 
             console.log(`Selected ${results.length} file(s)`);
@@ -448,6 +444,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                 myPhone,
                 contactPhone,
                 socketRef: socketRef.current,
+                chatId,
             });
 
         } catch (err: any) {
@@ -489,22 +486,30 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
         return () => clearTimeout(timer);
     }, [messages]);
 
+
     const renderMessage = ({ item }: { item: Message }) => {
         const isMe = item.from === "Me";
+        const file = item.file;
+
         return (
             <View style={[styles.msgWrap, { alignSelf: isMe ? "flex-end" : "flex-start" }]}>
                 <View style={[styles.bubble, isMe ? styles.mine : styles.theirs]}>
+
                     <Text style={styles.msgText}>{item.message}</Text>
+                    {/* Time */}
                     <Text style={styles.time}>
                         {new Date(item.timestamp).toLocaleTimeString([], {
                             hour: "2-digit",
                             minute: "2-digit",
                         })}
                     </Text>
+
                 </View>
             </View>
         );
     };
+
+
 
     return (
         <KeyboardAvoidingView

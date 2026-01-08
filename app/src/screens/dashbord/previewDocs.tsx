@@ -12,7 +12,9 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { io } from 'socket.io-client';
-const API_URL = "http://172.20.5.98:8000"; // Update this for production
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const API_URL = "http://172.20.5.98:8000";  // Update this for production
 // const API_URL = "https://chatter-mobo-app.onrender.com";
 
 interface UploadedFile {
@@ -25,18 +27,31 @@ interface UploadedFile {
     fileurl: string;
 }
 
+interface Message {
+    from: string;
+    message: string;
+    timestamp: number;
+    files?: {
+        name: string;
+        type: string;
+        size: number;
+        url: string;
+    }[];
+}
+
 interface RouteParams {
     uploadedFiles: UploadedFile[];
     myPhone: string;
     contactPhone: string;
     socketRef: React.MutableRefObject<any>;
     publickey?: string;
+    chatId: string;
 }
 
 const DocumentPreviewScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
-    const { uploadedFiles, myPhone, contactPhone, socketRef, publickey } = route.params as RouteParams;
+    const { uploadedFiles, myPhone, contactPhone, socketRef, publickey, chatId } = route.params as RouteParams;
 
     const [files, setFiles] = useState<UploadedFile[]>(uploadedFiles);
     const [message, setMessage] = useState('');
@@ -104,6 +119,9 @@ const DocumentPreviewScreen = () => {
                 url: file.fileurl,
             }));
 
+            // Generate timestamp
+            const timestamp = Date.now();
+
             // Prepare message payload
             const messagePayload = {
                 from: myPhone,
@@ -111,6 +129,7 @@ const DocumentPreviewScreen = () => {
                 files: filesData,
                 message: message.trim(),
                 publickey: publickey || '',
+                timestamp: timestamp,
             };
 
             // Send via socket
@@ -120,9 +139,36 @@ const DocumentPreviewScreen = () => {
             });
             socketRef.current?.emit("register", myPhone);
             socketRef.current?.emit('sendMessage', messagePayload);
-            // console.log("messagePayload : ", messagePayload);
 
+            // Create message object to save locally
+            const newMsg: Message = {
+                from: "Me",
+                message: message.trim() || `Sent ${files.length} document(s)`,
+                timestamp: timestamp,
+                files: filesData,
+            };
 
+            // Save to AsyncStorage
+            try {
+                // Get existing messages
+                const existingMessagesJson = await AsyncStorage.getItem(chatId);
+                const existingMessages: Message[] = existingMessagesJson
+                    ? JSON.parse(existingMessagesJson)
+                    : [];
+
+                // Add new message
+                const updatedMessages = [...existingMessages, newMsg];
+
+                // Save back to AsyncStorage
+                await AsyncStorage.setItem(chatId, JSON.stringify(updatedMessages));
+
+                console.log('Message saved to AsyncStorage:', newMsg);
+            } catch (storageError) {
+                console.error('Error saving to AsyncStorage:', storageError);
+            }
+
+            // Clear message input
+            setMessage("");
             setSending(false);
 
             Alert.alert(

@@ -65,7 +65,7 @@ io.on("connection", (socket) => {
         const receiverSocketId = connectedUsers.get(to);
         if (receiverSocketId) {
             // Receiver is online - send encrypted message directly
-            io.to(receiverSocketId).emit("receiveMessage", {
+            io.to(receiverSocketId).emit("Receivemessage", {
                 from,
                 message,
                 files: files || null,
