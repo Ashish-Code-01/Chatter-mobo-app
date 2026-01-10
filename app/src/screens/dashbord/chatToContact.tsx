@@ -32,10 +32,11 @@ interface Message {
 interface RouteParams {
     myPhone: string;
     contactPhone: string;
+    contactName?: string;
 }
 
 export default function ChatToContact({ route, navigation }: { route: { params: RouteParams }, navigation: any }) {
-    const { myPhone, contactPhone } = route.params;
+    const { myPhone, contactPhone, contactName } = route.params;
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
@@ -78,7 +79,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
 
             const contact = {
                 id: (existingUsers.length + 1).toString(),
-                name: contactPhone,
+                name: contactName || contactPhone,
                 phone: contactPhone,
                 publickey: secretkey || "",
                 avatar: contactAvatar || "",
@@ -530,7 +531,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                     </View>
                 )}
                 <View style={styles.headerContent}>
-                    <Text style={styles.headerTitle}>{contactPhone}</Text>
+                    <Text style={styles.headerTitle}>{contactName}</Text>
                     <Text style={[styles.statusText, { color: contactIsOnline ? "#00D4C2" : "#A9A9C5" }]}>
                         {contactIsOnline ? "● Online" : "● Offline"}
                     </Text>

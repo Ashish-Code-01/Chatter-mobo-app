@@ -10,17 +10,16 @@ import {
     RefreshControl,
     Platform,
 } from 'react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import Contacts from 'react-native-contacts';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// const API_URL = "http://10.73.208.98:8000"; // Update for production
 const API_URL = "https://chatter-mobo-app.onrender.com";
 
 interface ContactData {
-    phoneNumber: number | string;
+    phoneNumber: string; // Changed from number | string to just string
     displayName: string;
     isRegistered: boolean;
     userData?: {
@@ -45,11 +44,13 @@ const Home = ({ navigation }: any) => {
     const [syncing, setSyncing] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
-    const fetchRegisteredContacts = async () => {
+    // Wrapped in useCallback to prevent recreating on every render
+    const fetchRegisteredContacts = useCallback(async () => {
         try {
             const token = await AsyncStorage.getItem('token');
             if (!token) {
                 Alert.alert('Error', 'Please login again');
+                navigation.navigate('Login'); // Navigate to login if no token
                 return;
             }
 
@@ -64,15 +65,20 @@ const Home = ({ navigation }: any) => {
             }
         } catch (error: any) {
             console.error('Error fetching registered contacts:', error);
-            Alert.alert('Error', 'Failed to fetch contacts from server');
+            // More specific error message
+            const message = error.response?.data?.message || 'Failed to fetch contacts from server';
+            Alert.alert('Error', message);
         }
-    };
+    }, [navigation]);
 
-    const syncContactsWithBackend = async (deviceContacts: any[]) => {
+    const syncContactsWithBackend = useCallback(async (deviceContacts: any[]) => {
         try {
             setSyncing(true);
             const token = await AsyncStorage.getItem('token');
-            if (!token) return;
+            if (!token) {
+                Alert.alert('Error', 'Session expired. Please login again.');
+                return;
+            }
 
             const formattedContacts = deviceContacts
                 .filter((contact) => contact.phoneNumbers?.length > 0)
@@ -85,38 +91,53 @@ const Home = ({ navigation }: any) => {
                     ),
                 }));
 
+            // Don't sync if no contacts
+            if (formattedContacts.length === 0) {
+                Alert.alert('Info', 'No valid phone contacts found');
+                return;
+            }
+
             const response = await axios.post(
                 `${API_URL}/api/contact/sync`,
                 { contacts: formattedContacts },
                 { headers: { token } }
             );
 
-            if (response.data.success) await fetchRegisteredContacts();
-        } catch (error) {
+            if (response.data.success) {
+                await fetchRegisteredContacts();
+                // Optional: Show success message
+                // Alert.alert('Success', `Synced ${formattedContacts.length} contacts`);
+            }
+        } catch (error: any) {
             console.error('Sync error:', error);
+            const message = error.response?.data?.message || 'Failed to sync contacts';
+            Alert.alert('Sync Error', message);
         } finally {
             setSyncing(false);
         }
-    };
+    }, [fetchRegisteredContacts]);
 
-    const getContacts = async () => {
+    const getContacts = useCallback(async () => {
         try {
             setLoading(true);
             const deviceContacts = await Contacts.getAll();
+            
             if (deviceContacts.length === 0) {
                 Alert.alert('Info', 'No contacts found on device');
+                setLoading(false);
                 return;
             }
+
             await syncContactsWithBackend(deviceContacts);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error loading contacts:', error);
-            Alert.alert('Error', 'Failed to load contacts from device');
+            Alert.alert('Error', 'Failed to load contacts from device. Please check permissions.');
         } finally {
             setLoading(false);
         }
-    };
+    }, [syncContactsWithBackend]);
 
-    const requestPermissions = async () => {
+    const requestPermissions = useCallback(async () => {
         try {
             const permission =
                 Platform.OS === 'ios'
@@ -124,56 +145,75 @@ const Home = ({ navigation }: any) => {
                     : PERMISSIONS.ANDROID.READ_CONTACTS;
 
             const contactsResult = await request(permission);
-            if (contactsResult === RESULTS.GRANTED) await getContacts();
-            else
+            
+            if (contactsResult === RESULTS.GRANTED) {
+                await getContacts();
+            } else if (contactsResult === RESULTS.DENIED) {
                 Alert.alert(
                     'Permission Required',
-                    'Please enable contact permissions in settings.'
+                    'Contact access is needed to find your friends on Chatter.',
+                    [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Try Again', onPress: requestPermissions }
+                    ]
                 );
+            } else if (contactsResult === RESULTS.BLOCKED) {
+                Alert.alert(
+                    'Permission Blocked',
+                    'Please enable contact permissions in your device settings.',
+                    [{ text: 'OK' }]
+                );
+            }
         } catch (error) {
             console.error('Error requesting permissions:', error);
+            Alert.alert('Error', 'Failed to request contact permissions');
         }
-    };
+    }, [getContacts]);
 
-    const onRefresh = async () => {
+    const onRefresh = useCallback(async () => {
         setRefreshing(true);
         try {
             await getContacts();
         } finally {
             setRefreshing(false);
         }
-    };
+    }, [getContacts]);
 
-    const handleContactPress = async (contact: ContactData) => {
+    const handleContactPress = useCallback(async (contact: ContactData) => {
         try {
             const User = await AsyncStorage.getItem('User');
             const parsedUser = User ? JSON.parse(User) : null;
             const myPhoneNumber = parsedUser?.phoneNumber;
-            console.log(myPhoneNumber);
 
             if (!myPhoneNumber) {
                 Alert.alert(
                     'Error',
                     'Unable to find your phone number. Please log in again.'
                 );
+                navigation.navigate('Login');
                 return;
             }
+
             navigation.navigate('ChatToContact', {
                 myPhoneNumber,
                 contactPhone: contact.phoneNumber,
+                contactName: contact.displayName, // Use device contact name
+                contactAvatar: contact.userData?.avatar,
             });
         } catch (error) {
+            console.error('Error opening chat:', error);
             Alert.alert('Error', 'Failed to open chat');
         }
-    };
+    }, [navigation]);
 
-    const renderContactItem = ({ item }: { item: ContactData }) => (
+    const renderContactItem = useCallback(({ item }: { item: ContactData }) => (
         <TouchableOpacity
             style={[
                 styles.contactItem,
                 item.isRegistered && styles.registeredContact,
             ]}
             onPress={() => handleContactPress(item)}
+            activeOpacity={0.7}
         >
             <View style={styles.avatarContainer}>
                 {item.userData?.avatar ? (
@@ -183,14 +223,13 @@ const Home = ({ navigation }: any) => {
                     />
                 ) : (
                     <Text style={styles.avatarText}>
-                        {(item.userData?.name || item.displayName)?.[0]
-                            ?.toUpperCase() || '?'}
+                        {item.displayName?.[0]?.toUpperCase() || '?'}
                     </Text>
                 )}
             </View>
             <View style={styles.contactDetails}>
                 <Text style={styles.contactName}>
-                    {item.userData?.name || item.displayName || 'Unknown'}
+                    {item.displayName || 'Unknown'}
                 </Text>
                 <Text style={styles.contactInfo}>{item.phoneNumber}</Text>
                 {item.isRegistered && (
@@ -200,11 +239,11 @@ const Home = ({ navigation }: any) => {
                 )}
             </View>
         </TouchableOpacity>
-    );
+    ), [handleContactPress]);
 
     useEffect(() => {
         requestPermissions();
-    }, []);
+    }, [requestPermissions]);
 
     return (
         <View style={styles.container}>
@@ -213,7 +252,7 @@ const Home = ({ navigation }: any) => {
             <View style={styles.header}>
                 <Text style={styles.title}>Chatter</Text>
                 {(loading || syncing) && (
-                    <ActivityIndicator color="#00D4C2" />
+                    <ActivityIndicator color="#00D4C2" size="small" />
                 )}
             </View>
 
@@ -223,6 +262,7 @@ const Home = ({ navigation }: any) => {
                     <TouchableOpacity
                         style={styles.retryButton}
                         onPress={getContacts}
+                        activeOpacity={0.8}
                     >
                         <Text style={styles.retryButtonText}>Retry</Text>
                     </TouchableOpacity>
@@ -239,8 +279,11 @@ const Home = ({ navigation }: any) => {
                             refreshing={refreshing}
                             onRefresh={onRefresh}
                             tintColor="#00D4C2"
+                            colors={['#00D4C2']}
                         />
                     }
+                    contentContainerStyle={styles.listContent}
+                    showsVerticalScrollIndicator={false}
                 />
             )}
         </View>
@@ -305,6 +348,7 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.5,
         shadowRadius: 16,
+        elevation: 8, // Added for Android
     },
 
     retryButtonText: {
@@ -329,6 +373,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 4 },
+        elevation: 4, // Added for Android
     },
 
     registeredContact: {
@@ -394,6 +439,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.4,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 2 },
+        elevation: 4, // Added for Android
     },
 
     badgeText: {
@@ -401,5 +447,10 @@ const styles = StyleSheet.create({
         fontSize: 11,
         fontWeight: '700',
         letterSpacing: 0.3,
+    },
+
+    /* ==================== LIST ==================== */
+    listContent: {
+        paddingBottom: 20,
     },
 });

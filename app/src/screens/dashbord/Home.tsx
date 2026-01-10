@@ -86,6 +86,7 @@ const Home = ({ navigation }: any) => {
                                     displayName: c.displayName || c.givenName || "Unknown",
                                     phoneNumber: c.phoneNumbers[0].number.replace(/[\s\-()]/g, ""),
                                 }));
+                            await AsyncStorage.setItem("DeviceContacts", JSON.stringify(formatted));
 
                             await axios.post(
                                 `${API_URL}/api/contact/sync`,
@@ -195,6 +196,7 @@ const Home = ({ navigation }: any) => {
                                 navigation.navigate("ChatToContact", {
                                     myPhone: user?.phoneNumber,
                                     contactPhone: item.phone,
+                                    contactName: item.name,
                                 })
                             }
                         >
