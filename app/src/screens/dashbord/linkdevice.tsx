@@ -9,18 +9,27 @@ import {
     ActivityIndicator,
     Modal,
     TextInput,
-    ScrollView,
-    Platform
+    Platform,
+    RefreshControl,
 } from 'react-native'
 import axios from 'axios'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import DeviceInfo from 'react-native-device-info'
 
-// const API_URL = "http://10.73.208.98:8000"
 const API_URL = "https://chatter-mobo-app.onrender.com";
 
+interface Device {
+    deviceId: string;
+    deviceName: string;
+    deviceModel: string;
+    osVersion: string;
+    isPrimary: boolean;
+    linkedAt: string;
+    lastActive: string;
+}
+
 const LinkDevice = ({ navigation }: any) => {
-    const [devices, setDevices] = useState<any[]>([])
+    const [devices, setDevices] = useState<Device[]>([])
     const [loading, setLoading] = useState(false)
     const [refreshing, setRefreshing] = useState(false)
     const [token, setToken] = useState('')
@@ -33,19 +42,17 @@ const LinkDevice = ({ navigation }: any) => {
                 const storedToken = await AsyncStorage.getItem('token')
                 if (storedToken) {
                     setToken(storedToken)
+                } else {
+                    Alert.alert('Error', 'Please login again')
+                    navigation.navigate('Login')
                 }
             } catch (error) {
                 console.error('Error getting token:', error)
+                Alert.alert('Error', 'Failed to retrieve session')
             }
         }
         getToken()
-    }, [])
-
-    useEffect(() => {
-        if (token) {
-            fetchDevices()
-        }
-    }, [token])
+    }, [navigation])
 
     const fetchDevices = useCallback(async () => {
         if (!token) return
@@ -55,30 +62,35 @@ const LinkDevice = ({ navigation }: any) => {
             const response = await axios.get(
                 `${API_URL}/api/devices/list`,
                 {
-                    headers: {
-                        token
-                    }
+                    headers: { token }
                 }
             )
 
             if (response.data?.success) {
                 setDevices(response.data.data || [])
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error fetching devices:', error)
-            Alert.alert('Error', 'Failed to fetch devices')
+            const message = error.response?.data?.message || 'Failed to fetch devices'
+            Alert.alert('Error', message)
         } finally {
             setLoading(false)
             setRefreshing(false)
         }
     }, [token])
 
-    const handleRefresh = () => {
+    useEffect(() => {
+        if (token) {
+            fetchDevices()
+        }
+    }, [token, fetchDevices])
+
+    const handleRefresh = useCallback(() => {
         setRefreshing(true)
         fetchDevices()
-    }
+    }, [fetchDevices])
 
-    const handleLinkDevice = async () => {
+    const handleLinkDevice = useCallback(async () => {
         if (!deviceName.trim()) {
             Alert.alert('Error', 'Please enter a device name')
             return
@@ -97,9 +109,7 @@ const LinkDevice = ({ navigation }: any) => {
                     osVersion
                 },
                 {
-                    headers: {
-                        token
-                    }
+                    headers: { token }
                 }
             )
 
@@ -111,13 +121,14 @@ const LinkDevice = ({ navigation }: any) => {
             }
         } catch (error: any) {
             console.error('Error linking device:', error)
-            Alert.alert('Error', error.response?.data?.message || 'Failed to link device')
+            const message = error.response?.data?.message || 'Failed to link device'
+            Alert.alert('Error', message)
         } finally {
             setLoading(false)
         }
-    }
+    }, [deviceName, token, fetchDevices])
 
-    const handleUnlinkDevice = (deviceId: string, deviceName: string) => {
+    const handleUnlinkDevice = useCallback((deviceId: string, deviceName: string) => {
         Alert.alert(
             'Unlink Device',
             `Are you sure you want to unlink "${deviceName}"?`,
@@ -133,9 +144,7 @@ const LinkDevice = ({ navigation }: any) => {
                                 `${API_URL}/api/devices/unlink`,
                                 { deviceId },
                                 {
-                                    headers: {
-                                        token
-                                    }
+                                    headers: { token }
                                 }
                             )
 
@@ -145,7 +154,8 @@ const LinkDevice = ({ navigation }: any) => {
                             }
                         } catch (error: any) {
                             console.error('Error unlinking device:', error)
-                            Alert.alert('Error', error.response?.data?.message || 'Failed to unlink device')
+                            const message = error.response?.data?.message || 'Failed to unlink device'
+                            Alert.alert('Error', message)
                         } finally {
                             setLoading(false)
                         }
@@ -153,18 +163,16 @@ const LinkDevice = ({ navigation }: any) => {
                 }
             ]
         )
-    }
+    }, [token, fetchDevices])
 
-    const handleSetPrimaryDevice = async (deviceId: string) => {
+    const handleSetPrimaryDevice = useCallback(async (deviceId: string) => {
         try {
             setLoading(true)
             const response = await axios.post(
                 `${API_URL}/api/devices/set-primary`,
                 { deviceId },
                 {
-                    headers: {
-                        token
-                    }
+                    headers: { token }
                 }
             )
 
@@ -174,16 +182,17 @@ const LinkDevice = ({ navigation }: any) => {
             }
         } catch (error: any) {
             console.error('Error setting primary device:', error)
-            Alert.alert('Error', error.response?.data?.message || 'Failed to set primary device')
+            const message = error.response?.data?.message || 'Failed to set primary device'
+            Alert.alert('Error', message)
         } finally {
             setLoading(false)
         }
-    }
+    }, [token, fetchDevices])
 
-    const renderDeviceItem = ({ item }: any) => (
+    const renderDeviceItem = useCallback(({ item }: { item: Device }) => (
         <View style={styles.deviceCard}>
             <View style={styles.deviceHeader}>
-                <View>
+                <View style={styles.deviceInfo}>
                     <Text style={styles.deviceName}>{item.deviceName}</Text>
                     <Text style={styles.deviceModel}>{item.deviceModel}</Text>
                     <Text style={styles.deviceOS}>{item.osVersion}</Text>
@@ -210,6 +219,7 @@ const LinkDevice = ({ navigation }: any) => {
                         style={[styles.button, styles.primaryButton]}
                         onPress={() => handleSetPrimaryDevice(item.deviceId)}
                         disabled={loading}
+                        activeOpacity={0.7}
                     >
                         <Text style={styles.buttonText}>Set Primary</Text>
                     </TouchableOpacity>
@@ -218,54 +228,81 @@ const LinkDevice = ({ navigation }: any) => {
                     style={[styles.button, styles.unlinkButton]}
                     onPress={() => handleUnlinkDevice(item.deviceId, item.deviceName)}
                     disabled={loading}
+                    activeOpacity={0.7}
                 >
                     <Text style={styles.unlinkButtonText}>Unlink</Text>
                 </TouchableOpacity>
             </View>
         </View>
-    )
+    ), [loading, handleSetPrimaryDevice, handleUnlinkDevice])
 
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Linked Devices</Text>
-                <Text style={styles.headerSubtitle}>Manage your connected devices</Text>
+                <View>
+                    <Text style={styles.headerTitle}>Linked Devices</Text>
+                    <Text style={styles.headerSubtitle}>
+                        {devices.length > 0 
+                            ? `${devices.length} device${devices.length > 1 ? 's' : ''} connected`
+                            : 'Manage your connected devices'}
+                    </Text>
+                </View>
             </View>
 
-            {loading && !devices.length && (
+            {loading && devices.length === 0 && (
                 <View style={styles.centerContainer}>
-                    <ActivityIndicator size="large" color="#007AFF" />
+                    <ActivityIndicator size="large" color="#00D4C2" />
+                    <Text style={styles.loadingText}>Loading devices...</Text>
                 </View>
             )}
 
             {devices.length === 0 && !loading && (
                 <View style={styles.centerContainer}>
                     <Text style={styles.emptyText}>No devices linked yet</Text>
+                    <TouchableOpacity
+                        style={styles.emptyButton}
+                        onPress={() => setShowLinkModal(true)}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={styles.emptyButtonText}>Link Your First Device</Text>
+                    </TouchableOpacity>
                 </View>
             )}
 
-            <FlatList
-                data={devices}
-                keyExtractor={(item) => item.deviceId}
-                renderItem={renderDeviceItem}
-                scrollEnabled={false}
-                contentContainerStyle={styles.listContainer}
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-            />
+            {devices.length > 0 && (
+                <FlatList
+                    data={devices}
+                    keyExtractor={(item) => item.deviceId}
+                    renderItem={renderDeviceItem}
+                    contentContainerStyle={styles.listContainer}
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={handleRefresh}
+                            tintColor="#00D4C2"
+                            colors={['#00D4C2']}
+                        />
+                    }
+                    showsVerticalScrollIndicator={false}
+                />
+            )}
 
-            <TouchableOpacity
-                style={styles.linkButton}
-                onPress={() => setShowLinkModal(true)}
-                disabled={loading}
-            >
-                <Text style={styles.linkButtonText}>+ Link New Device</Text>
-            </TouchableOpacity>
+            {devices.length > 0 && (
+                <TouchableOpacity
+                    style={styles.linkButton}
+                    onPress={() => setShowLinkModal(true)}
+                    disabled={loading}
+                    activeOpacity={0.8}
+                >
+                    <Text style={styles.linkButtonText}>+ Link New Device</Text>
+                </TouchableOpacity>
+            )}
 
             <Modal
                 visible={showLinkModal}
                 animationType="slide"
                 transparent={true}
+                onRequestClose={() => setShowLinkModal(false)}
             >
                 <View style={styles.modalContainer}>
                     <View style={styles.modalContent}>
@@ -275,9 +312,11 @@ const LinkDevice = ({ navigation }: any) => {
                         <TextInput
                             style={styles.input}
                             placeholder="e.g., My iPhone, Office Android"
+                            placeholderTextColor="rgba(200, 210, 234, 0.4)"
                             value={deviceName}
                             onChangeText={setDeviceName}
                             editable={!loading}
+                            autoFocus
                         />
 
                         <View style={styles.modalButtonContainer}>
@@ -288,6 +327,7 @@ const LinkDevice = ({ navigation }: any) => {
                                     setDeviceName('')
                                 }}
                                 disabled={loading}
+                                activeOpacity={0.7}
                             >
                                 <Text style={styles.cancelButtonText}>Cancel</Text>
                             </TouchableOpacity>
@@ -296,9 +336,10 @@ const LinkDevice = ({ navigation }: any) => {
                                 style={[styles.modalButton, styles.confirmButton]}
                                 onPress={handleLinkDevice}
                                 disabled={loading}
+                                activeOpacity={0.8}
                             >
                                 {loading ? (
-                                    <ActivityIndicator color="#FFFFFF" size="small" />
+                                    <ActivityIndicator color="#0F1419" size="small" />
                                 ) : (
                                     <Text style={styles.confirmButtonText}>Link Device</Text>
                                 )}
@@ -325,7 +366,10 @@ const styles = StyleSheet.create({
         paddingTop: 50,
         paddingBottom: 20,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0, 212, 194, 0.1)'
+        borderBottomColor: 'rgba(0, 212, 194, 0.1)',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
 
     headerTitle: {
@@ -345,7 +389,8 @@ const styles = StyleSheet.create({
     /* ==================== LIST ==================== */
     listContainer: {
         paddingHorizontal: 12,
-        paddingVertical: 16
+        paddingVertical: 16,
+        paddingBottom: 100,
     },
 
     /* ==================== DEVICE CARD ==================== */
@@ -354,12 +399,12 @@ const styles = StyleSheet.create({
         borderRadius: 18,
         padding: 16,
         marginBottom: 12,
-        borderWidth: 1,
         borderColor: 'rgba(0, 212, 194, 0.1)',
         shadowColor: '#00D4C2',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.2,
-        shadowRadius: 12
+        shadowRadius: 12,
+        elevation: 2,
     },
 
     deviceHeader: {
@@ -367,6 +412,10 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'flex-start',
         marginBottom: 14
+    },
+
+    deviceInfo: {
+        flex: 1,
     },
 
     deviceName: {
@@ -409,10 +458,11 @@ const styles = StyleSheet.create({
     /* ==================== DEVICE META ==================== */
     deviceMeta: {
         marginBottom: 14,
-        paddingVertical: 10,
-        borderTopWidth: 1,
-        borderBottomWidth: 1,
-        borderColor: 'rgba(0, 212, 194, 0.08)'
+        paddingTop: 12,
+        paddingBottom: 12,
+        borderTopWidth: 0.5,
+        borderBottomWidth: 0.5,
+        borderColor: 'rgba(0, 212, 194, 0.15)'
     },
 
     metaText: {
@@ -463,8 +513,10 @@ const styles = StyleSheet.create({
 
     /* ==================== LINK BUTTON ==================== */
     linkButton: {
-        marginHorizontal: 12,
-        marginBottom: 20,
+        position: 'absolute',
+        bottom: 20,
+        left: 12,
+        right: 12,
         backgroundColor: 'rgba(0, 212, 194, 0.9)',
         paddingVertical: 15,
         borderRadius: 16,
@@ -472,7 +524,8 @@ const styles = StyleSheet.create({
         shadowColor: '#00D4C2',
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.5,
-        shadowRadius: 16
+        shadowRadius: 16,
+        elevation: 8,
     },
 
     linkButtonText: {
@@ -486,19 +539,47 @@ const styles = StyleSheet.create({
     centerContainer: {
         flex: 1,
         justifyContent: 'center',
-        alignItems: 'center'
+        alignItems: 'center',
+        paddingHorizontal: 20,
+    },
+
+    loadingText: {
+        fontSize: 14,
+        color: 'rgba(200, 210, 234, 0.7)',
+        marginTop: 16,
+        fontWeight: '500',
     },
 
     emptyText: {
         fontSize: 16,
         color: 'rgba(200, 210, 234, 0.5)',
+        marginBottom: 24,
         fontWeight: '500'
+    },
+
+    emptyButton: {
+        backgroundColor: 'rgba(0, 212, 194, 0.9)',
+        paddingHorizontal: 28,
+        paddingVertical: 15,
+        borderRadius: 16,
+        shadowColor: '#00D4C2',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.5,
+        shadowRadius: 16,
+        elevation: 8,
+    },
+
+    emptyButtonText: {
+        color: '#0F1419',
+        fontSize: 16,
+        fontWeight: '700',
+        letterSpacing: 0.4,
     },
 
     /* ==================== MODAL ==================== */
     modalContainer: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
         justifyContent: 'flex-end'
     },
 
@@ -575,7 +656,8 @@ const styles = StyleSheet.create({
         shadowColor: '#00D4C2',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.4,
-        shadowRadius: 12
+        shadowRadius: 12,
+        elevation: 4,
     },
 
     confirmButtonText: {
