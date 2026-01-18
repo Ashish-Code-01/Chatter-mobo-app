@@ -24,9 +24,9 @@ export const io = new Server(server, {
     },
 });
 
-// handle socket connection
-
+// handle socket connection for messaging and online status
 const connectedUsers = new Map(); // phoneNumber -> socket.id
+const linkdevices = new Map()
 
 io.on("connection", (socket) => {
     console.log("New client connected:", socket.id);
@@ -88,6 +88,13 @@ io.on("connection", (socket) => {
         }
     });
 
+    io.on("LinkDevice", (socketId, token) => {
+        if (!token) return;
+        linkdevices.set(socket.id);
+        io.to(socketId).emit("DeviceLinked", { token });
+
+    });
+
     // Handle disconnect
     socket.on("disconnect", async () => {
         const phoneNumber = getPhoneBySocket(socket.id);
@@ -121,6 +128,8 @@ function getPhoneBySocket(socketId) {
     }
     return null;
 }
+
+// Socket io setup for the link Device feature can be added here
 
 // app.use(morgan('dev')); //for development mode only
 
