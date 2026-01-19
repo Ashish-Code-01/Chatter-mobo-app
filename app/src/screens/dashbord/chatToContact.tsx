@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import {
     Text,
     TextInput,
@@ -11,14 +11,14 @@ import {
     ActivityIndicator,
     Image,
 } from "react-native";
-import { io, Socket } from "socket.io-client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Alert } from "react-native";
 import { pick, types } from '@react-native-documents/picker';
 import axios from "axios";
+import { useSocket } from "../../context/socketcontext";
 
 // Configuration
-const API_URL = "http://172.20.5.98:8000"; // Update this for production
+const API_URL = "http://10.119.77.98:8000";// Update this for production
 // const API_URL = "https://chatter-mobo-app.onrender.com";
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dqmxpgv5k/image/upload/v1765892967/A_circular_default_c_cafouy.png";
 
@@ -37,6 +37,8 @@ interface RouteParams {
 
 export default function ChatToContact({ route, navigation }: { route: { params: RouteParams }, navigation: any }) {
     const { myPhone, contactPhone, contactName } = route.params;
+    const { socket, isConnected, onMessageReceived, offMessageReceived, onStatusChanged, offStatusChanged, sendMessage } = useSocket();
+
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
@@ -44,16 +46,14 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
     const [contactIsOnline, setContactIsOnline] = useState(false);
     const [contactAvatar, setContactAvatar] = useState<string>("");
 
-
-    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!'_-&@#$%*()/:<>|+= ";
+    const alphabet = useMemo(() => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!'_-&@#$%*()/:<>|+= ", []);
 
     const flatListRef = useRef<FlatList>(null);
-    const socketRef = useRef<Socket | null>(null);
-    const chatId = `chat_${[myPhone, contactPhone].sort().join("_")}`;
+    const chatId = useMemo(() => `chat_${[myPhone, contactPhone].sort().join("_")}`, [myPhone, contactPhone]);
 
     const dedupeMessages = useCallback((list: Message[]) => {
         const map = new Map();
-        list.forEach((m) => {
+        list.forEach((m) =>{
             // Create a more robust key that includes message content and from field
             // Use a small time window (1 second) to catch duplicates
             const timeWindow = Math.floor(m.timestamp / 1000);
@@ -157,35 +157,18 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
         return decryptedText;
     };
 
-    // Setup Socket
+    // Setup message listener
     useEffect(() => {
-        socketRef.current = io(API_URL, {
-            transports: ["websocket"],
-            reconnection: true,
-        });
+        if (!isConnected) return;
 
-        socketRef.current.emit("register", myPhone);
-
-
-        // Listen for online status changes
-        socketRef.current.on("userStatusChanged", ({ phoneNumber, isOnline }: { phoneNumber: string; isOnline: boolean }) => {
-            if (phoneNumber === contactPhone) {
-                setContactIsOnline(isOnline);
-            }
-        });
-
-        socketRef.current.on("Receivemessage", async ({ from, message: encryptedMsg, publickey, files }: { from: string; message: string; publickey: string, files: [] }) => {
-
-            console.log(`this msg is from ${from} with public key ${publickey}: ${encryptedMsg}`);
+        const handleMessageReceived = async ({ from, message: encryptedMsg, publickey, files }: { from: string; message: string; publickey: string, files: [] }) => {
+            console.log(`Message from ${from}: ${encryptedMsg}`);
             try {
-                if (from === myPhone) {
-                    return;
-                }
+                if (from === myPhone) return;
 
                 let keyToUse = secretKey;
 
                 if (!keyToUse) {
-
                     const privatekey = await AsyncStorage.getItem("privatekey");
                     if (publickey && privatekey) {
                         keyToUse = publickey + privatekey;
@@ -202,36 +185,18 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                     return;
                 }
 
-                // Decrypt the message
                 const decryptedMsg = decryptMessage(encryptedMsg, keyToUse);
 
-                // Store the public key for future reference
                 if (publickey && !secretKey) {
                     await AsyncStorage.setItem("secretkey", keyToUse);
                     setSecretKey(keyToUse);
-                }
-
-                if (files) {
-
-                    const newMsg: Message = {
-                        from: from,
-                        message: decryptedMsg,
-                        timestamp: Date.now(),
-                        file: files,
-                    };
-
-                    setMessages((prev) => {
-                        const merged = dedupeMessages([...prev, newMsg]);
-                        AsyncStorage.setItem(chatId, JSON.stringify(merged));
-                        return merged;
-                    });
-                    return;
                 }
 
                 const newMsg: Message = {
                     from: from,
                     message: decryptedMsg,
                     timestamp: Date.now(),
+                    file: files || undefined,
                 };
 
                 setMessages((prev) => {
@@ -242,16 +207,29 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
             } catch (error) {
                 console.error("Error receiving message:", error);
             }
-        });
+        };
 
-        socketRef.current.on("connect_error", (error) => {
-            console.error("Socket connection error:", error);
-        });
+        onMessageReceived(handleMessageReceived);
 
         return () => {
-            socketRef.current?.disconnect();
+            offMessageReceived();
         };
-    }, [myPhone, secretKey, dedupeMessages, chatId, contactPhone]);
+    }, [isConnected, secretKey, dedupeMessages, chatId, myPhone, onMessageReceived, offMessageReceived]);
+
+    // Setup status listener
+    useEffect(() => {
+        const handleStatusChanged = ({ phoneNumber, isOnline }: { phoneNumber: string; isOnline: boolean }) => {
+            if (phoneNumber === contactPhone) {
+                setContactIsOnline(isOnline);
+            }
+        };
+
+        onStatusChanged(handleStatusChanged);
+
+        return () => {
+            offStatusChanged();
+        };
+    }, [contactPhone, onStatusChanged, offStatusChanged]);
 
     useEffect(() => {
         (async () => {
@@ -352,7 +330,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
         }
     };
 
-    const handleSend = async () => {
+    const handleSend = useCallback(async () => {
         try {
             if (!message.trim()) return;
 
@@ -396,19 +374,13 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
 
             const publickey = keyToUse.substring(0, 16);
 
-            socketRef.current?.emit("sendMessage", {
-                from: myPhone,
-                to: contactPhone,
-                message: encryptedMsg,
-                file: "",
-                publickey: publickey,
-            });
+            sendMessage(contactPhone, encryptedMsg, publickey);
 
         } catch (error) {
             console.error("Error sending message:", error);
             Alert.alert("Error", "Failed to send message");
         }
-    };
+    }, [message, secretKey, chatId, contactPhone, sendMessage, encryptMessage]);
 
 
     const handleAttachDocument = async () => {
@@ -444,7 +416,6 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                 uploadedFiles,
                 myPhone,
                 contactPhone,
-                socketRef: socketRef.current,
                 chatId,
             });
 

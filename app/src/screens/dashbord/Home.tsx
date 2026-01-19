@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
     StyleSheet,
     Text,
@@ -13,21 +13,18 @@ import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import Contacts from 'react-native-contacts';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { io } from "socket.io-client";
+import { useSocket } from '../../context/socketcontext';
 
-const API_URL = "http://172.20.5.98:8000";  // Update this for production
-// const API_URL = "https://chatter-mobo-app.onrender.com";
-
-const socket = io(API_URL);
-
-
+const API_URL = "http://10.119.77.98:8000";  // Update this for production
 
 const Home = ({ navigation }: any) => {
+    const { registerUser, unregisterUser, onStatusChanged, offStatusChanged, contactStatusMap: contextStatusMap } = useSocket();
+
     const [user, setUser] = useState<any>(null);
     const [unseenMessages, setUnseenMessages] = useState<any>({});
     const [UsersContact, setUsersContact] = useState<any>([]);
     const [menuVisible, setMenuVisible] = useState(false);
-    const [contactStatusMap, setContactStatusMap] = useState<any>({});
+    const [contactStatusMap, setContactStatusMap] = useState<any>(contextStatusMap);
 
     const fetchContactStatus = useCallback(async (phoneNumber: string) => {
         try {
@@ -45,25 +42,29 @@ const Home = ({ navigation }: any) => {
         }
     }, []);
 
-    const handleLogout = async () => {
+    const handleLogout = useCallback(async () => {
         Alert.alert("Logout", "Are you sure?", [
             { text: "Cancel", style: "cancel" },
             {
                 text: "Logout",
                 style: "destructive",
                 onPress: async () => {
-                    await AsyncStorage.clear();
-                    socket.disconnect();
-                    navigation.reset({ index: 0, routes: [{ name: "Welcome" }] });
+                    try {
+                        await AsyncStorage.clear();
+                        unregisterUser();
+                        navigation.reset({ index: 0, routes: [{ name: "Welcome" }] });
+                    } catch (error) {
+                        console.error('Logout error:', error);
+                    }
                 },
             },
         ]);
-    };
+    }, [unregisterUser, navigation]);
 
-    const handleLinkDevices = () => {
+    const handleLinkDevices = useCallback(() => {
         setMenuVisible(false);
         navigation.navigate("LinkDevicesScreen");
-    }
+    }, [navigation]);
 
     useEffect(() => {
         const initialize = async () => {
@@ -108,7 +109,7 @@ const Home = ({ navigation }: any) => {
                 if (savedUser) {
                     const parsed = JSON.parse(savedUser);
                     setUser(parsed);
-                    socket.emit("register", parsed.phoneNumber);
+                    registerUser(parsed.phoneNumber);
                 } else {
                     const { data } = await axios.post(
                         `${API_URL}/auth/me`,
@@ -119,7 +120,7 @@ const Home = ({ navigation }: any) => {
                     if (data?.user) {
                         setUser(data.user);
                         await AsyncStorage.setItem("User", JSON.stringify(data.user));
-                        socket.emit("register", data.user.phoneNumber);
+                        registerUser(data.user.phoneNumber);
                     }
                 }
 
@@ -140,33 +141,50 @@ const Home = ({ navigation }: any) => {
                     setUnseenMessages(grouped);
                 }
 
-                // Get contacts and statuses
+                // Get contacts
                 const res = await AsyncStorage.getItem("Users");
                 const contacts = res ? JSON.parse(res) : [];
                 setUsersContact(contacts);
 
-                contacts.forEach((contact: any) => {
-                    fetchContactStatus(contact.phone);
-                });
+                // Fetch initial statuses from API
+                for (const contact of contacts) {
+                    try {
+                        const response = await axios.get(
+                            `${API_URL}/api/online/status/${contact.phone}`
+                        );
+                        if (response.data?.success) {
+                            setContactStatusMap((prev: any) => ({
+                                ...prev,
+                                [contact.phone]: response.data.data.isOnline
+                            }));
+                        }
+                    } catch (error) {
+                        console.error(`Error fetching status for ${contact.phone}:`, error);
+                    }
+                }
             } catch (error) {
                 console.error('Initialization error:', error);
             }
         };
 
         initialize();
+    }, [registerUser]);
 
-        // Listen for status changes
-        socket.on("userStatusChanged", ({ phoneNumber, isOnline }: { phoneNumber: string; isOnline: boolean }) => {
+    // Listen for real-time status changes
+    useEffect(() => {
+        const handleStatusChanged = ({ phoneNumber, isOnline }: { phoneNumber: string; isOnline: boolean }) => {
             setContactStatusMap((prev: any) => ({
                 ...prev,
                 [phoneNumber]: isOnline
             }));
-        });
+        };
+
+        onStatusChanged(handleStatusChanged);
 
         return () => {
-            socket.off("userStatusChanged");
+            offStatusChanged();
         };
-    }, [fetchContactStatus]);
+    }, [onStatusChanged, offStatusChanged]);
 
     return (
         <View style={styles.container}>

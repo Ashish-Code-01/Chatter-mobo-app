@@ -15,6 +15,7 @@ import {
 import axios from 'axios'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import DeviceInfo from 'react-native-device-info'
+import { Socket } from 'socket.io-client'
 
 const API_URL = "https://chatter-mobo-app.onrender.com";
 
@@ -114,7 +115,7 @@ const LinkDevice = ({ navigation }: any) => {
             )
 
             if (response.data?.success) {
-                Alert.alert('Success', 'Device linked successfully')
+                navigation.navigate('QrScannerScreen')
                 setDeviceName('')
                 setShowLinkModal(false)
                 fetchDevices()
@@ -242,7 +243,7 @@ const LinkDevice = ({ navigation }: any) => {
                 <View>
                     <Text style={styles.headerTitle}>Linked Devices</Text>
                     <Text style={styles.headerSubtitle}>
-                        {devices.length > 0 
+                        {devices.length > 0
                             ? `${devices.length} device${devices.length > 1 ? 's' : ''} connected`
                             : 'Manage your connected devices'}
                     </Text>

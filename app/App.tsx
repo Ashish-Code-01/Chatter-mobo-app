@@ -8,6 +8,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect } from 'react';
 
+import { SocketProvider } from './src/context/socketcontext';
 
 import WelcomeScreen from './src/screens/auth/WelcomeScreen';
 import LoginScreen from './src/screens/auth/LoginScreen';
@@ -19,8 +20,30 @@ import ChatToContact from './src/screens/dashbord/chatToContact';
 import updateUserDetails from './src/screens/auth/updateUserDetails'
 import LinkDevicesScreen from './src/screens/dashbord/linkdevice';
 import PreviewDocuments from './src/screens/dashbord/previewDocs';
+import QrScannerScreen from './src/screens/dashbord/qr-scanner';
 
 const Stack = createNativeStackNavigator();
+
+function RootNavigator({ initialRoute }: { initialRoute: string }) {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName={initialRoute}>
+        <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="Otp" component={OTPScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="EditDetails" component={EditDetailsScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="home" component={HomeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="AddContact" component={AddContact} options={{ headerShown: false }} />
+        <Stack.Screen name="ChatToContact" component={ChatToContact} options={{ headerShown: false }} />
+        <Stack.Screen name="updateUserDetails" component={updateUserDetails} options={{ headerShown: false }} />
+        <Stack.Screen name="LinkDevicesScreen" component={LinkDevicesScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="PreviewDocuments" component={PreviewDocuments} options={{ headerShown: false }} />
+        <Stack.Screen name="QrScannerScreen" component={QrScannerScreen} options={{ headerShown: false }} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
 export default function App() {
   const [initialRoute, setInitialRoute] = useState<string | null>(null);
 
@@ -39,30 +62,12 @@ export default function App() {
 
   // Show a loading screen while checking for token
   if (initialRoute === null) {
-    return "Welcome";
+    return null;
   }
-  AddContact
+
   return (
-    <NavigationContainer>
-      {/* <Stack.Navigator initialRouteName={"updateUserDetails"}> */}
-      <Stack.Navigator initialRouteName={initialRoute}>
-        <Stack.Screen name="Welcome" component={WelcomeScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Otp" component={OTPScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="EditDetails" component={EditDetailsScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="home" component={HomeScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="AddContact" component={AddContact} options={{ headerShown: false }} />
-        <Stack.Screen name="ChatToContact" component={ChatToContact} options={{ headerShown: false }} />
-        <Stack.Screen name="updateUserDetails" component={updateUserDetails} options={{ headerShown: false }} />
-        <Stack.Screen name="LinkDevicesScreen" component={LinkDevicesScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="PreviewDocuments" component={PreviewDocuments} options={{ headerShown: false }} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <SocketProvider>
+      <RootNavigator initialRoute={initialRoute} />
+    </SocketProvider>
   );
 }
-
-// How to build release APK
-
-// cd android
-// ./gradlew clean
-// ./gradlew assembleRelease
