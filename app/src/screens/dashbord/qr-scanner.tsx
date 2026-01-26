@@ -4,19 +4,24 @@ import {
     Text,
     View,
     TouchableOpacity,
-    Alert,
-    Linking,
     Vibration,
     StatusBar,
 } from 'react-native';
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
+import { useSocket } from '../../context/socketcontext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const QRScanner = () => {
     const [hasPermission, setHasPermission] = useState(false);
     const [isActive, setIsActive] = useState(true);
-    const [scannedData, setScannedData] = useState(null);
+    const { linkDevice } = useSocket();
 
     const device = useCameraDevice('back');
+
+    const sendLinkDevice = async (socketId: string) => {
+        const token = await AsyncStorage.getItem('token') || '';
+        linkDevice(socketId, token);
+    }
 
     // Code scanner configuration
     const codeScanner = useCodeScanner({
@@ -25,40 +30,9 @@ const QRScanner = () => {
             if (codes.length > 0 && isActive) {
                 const qrData = codes[0]?.value;
                 if (qrData) {
-                    setScannedData(qrData);
                     setIsActive(false);
                     Vibration.vibrate(200);
-
-                    Alert.alert(
-                        'QR Code Scanned',
-                        qrData,
-                        [
-                            {
-                                text: 'Open Link',
-                                onPress: () => {
-                                    if (qrData.startsWith('http')) {
-                                        Linking.openURL(qrData);
-                                    }
-                                },
-                                style: 'default',
-                            },
-                            {
-                                text: 'Copy',
-                                onPress: () => {
-                                    // You can add clipboard functionality here
-                                    Alert.alert('Copied', 'QR code data copied');
-                                },
-                            },
-                            {
-                                text: 'Scan Again',
-                                onPress: () => {
-                                    setScannedData(null);
-                                    setIsActive(true);
-                                },
-                                style: 'cancel',
-                            },
-                        ]
-                    );
+                    sendLinkDevice(qrData);
                 }
             }
         },
@@ -124,29 +98,6 @@ const QRScanner = () => {
                         <View style={[styles.corner, styles.bottomRight]} />
                     </View>
                     <View style={styles.sideOverlay} />
-                </View>
-
-                <View style={styles.bottomOverlay}>
-                    <Text style={styles.instructionText}>
-                        {scannedData ? 'QR Code Scanned!' : 'Align QR code within frame'}
-                    </Text>
-
-                    {scannedData && (
-                        <View style={styles.resultContainer}>
-                            <Text style={styles.resultText} numberOfLines={3}>
-                                {scannedData}
-                            </Text>
-                            <TouchableOpacity
-                                style={styles.scanAgainButton}
-                                onPress={() => {
-                                    setScannedData(null);
-                                    setIsActive(true);
-                                }}
-                            >
-                                <Text style={styles.scanAgainText}>Scan Again</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
                 </View>
             </View>
         </View>

@@ -8,9 +8,9 @@ import React, {
     ReactNode,
 } from 'react';
 import { io, Socket } from 'socket.io-client';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = "http://10.119.77.98:8000"; // Update for production
+// const API_URL = "http://10.119.77.98:8000"; // Update for production
+const API_URL = "https://chatter-mobo-app.onrender.com/";
 
 interface SocketContextType {
     socket: Socket | null;
@@ -22,6 +22,7 @@ interface SocketContextType {
     unregisterUser: () => void;
     sendMessage: (to: string, message: string, publickey: string, file?: any) => void;
     sendFiles: (to: string, files: any[], message: string, publickey: string) => void;
+    linkDevice: (socketId: string, token: string) => boolean;
     onMessageReceived: (callback: (data: any) => void) => void;
     onStatusChanged: (callback: (data: any) => void) => void;
     offMessageReceived: () => void;
@@ -236,6 +237,26 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         [currentUser]
     );
 
+    const linkDevice = useCallback(
+    (socketId: string, token: string): boolean => {
+        if (!socketId || !token) {
+            console.error('SocketId or token missing for linkDevice');
+            return false;
+        }
+
+        const socket = socketRef.current;
+        if (!socket) {
+            console.error('Socket not initialized for linkDevice');
+            return false;
+        }
+
+        socket.emit('linkDevice', { socketId, token });
+        return true;
+    },
+    []
+);
+
+
     // Register message callback
     const onMessageReceived = useCallback((callback: (data: any) => void) => {
         messageCallbackRef.current = callback;
@@ -256,6 +277,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         statusCallbackRef.current = null;
     }, []);
 
+
     const value: SocketContextType = {
         socket: socketRef.current,
         isConnected,
@@ -270,6 +292,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         offMessageReceived,
         onStatusChanged,
         offStatusChanged,
+        linkDevice,
     };
 
     return (
