@@ -16,7 +16,6 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 
-// const API_URL = "http://10.73.208.98:8000"; // Update for production
 const API_URL = "https://chatter-mobo-app.onrender.com";
 
 const EditDetails = ({ navigation }: any) => {

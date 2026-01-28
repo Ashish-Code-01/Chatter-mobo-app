@@ -15,7 +15,6 @@ import {
 import axios from 'axios'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import DeviceInfo from 'react-native-device-info'
-import { Socket } from 'socket.io-client'
 
 const API_URL = "https://chatter-mobo-app.onrender.com";
 

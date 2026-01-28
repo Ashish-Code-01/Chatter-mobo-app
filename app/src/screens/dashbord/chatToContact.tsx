@@ -17,9 +17,7 @@ import { pick, types } from '@react-native-documents/picker';
 import axios from "axios";
 import { useSocket } from "../../context/socketcontext";
 
-// Configuration
-const API_URL = "http://10.119.77.98:8000";// Update this for production
-// const API_URL = "https://chatter-mobo-app.onrender.com";
+const API_URL = "https://chatter-mobo-app.onrender.com";
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dqmxpgv5k/image/upload/v1765892967/A_circular_default_c_cafouy.png";
 
 interface Message {
@@ -37,7 +35,7 @@ interface RouteParams {
 
 export default function ChatToContact({ route, navigation }: { route: { params: RouteParams }, navigation: any }) {
     const { myPhone, contactPhone, contactName } = route.params;
-    const { socket, isConnected, onMessageReceived, offMessageReceived, onStatusChanged, offStatusChanged, sendMessage } = useSocket();
+    const { isConnected, onMessageReceived, offMessageReceived, onStatusChanged, offStatusChanged, sendMessage } = useSocket();
 
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
@@ -53,7 +51,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
 
     const dedupeMessages = useCallback((list: Message[]) => {
         const map = new Map();
-        list.forEach((m) =>{
+        list.forEach((m) => {
             // Create a more robust key that includes message content and from field
             // Use a small time window (1 second) to catch duplicates
             const timeWindow = Math.floor(m.timestamp / 1000);

@@ -15,7 +15,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSocket } from '../../context/socketcontext';
 
-const API_URL = "http://10.119.77.98:8000";  // Update this for production
+const API_URL = "https://chatter-mobo-app.onrender.com";
 
 const Home = ({ navigation }: any) => {
     const { registerUser, unregisterUser, onStatusChanged, offStatusChanged, contactStatusMap: contextStatusMap } = useSocket();

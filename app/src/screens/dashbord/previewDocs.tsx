@@ -14,8 +14,6 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSocket } from '../../context/socketcontext';
 
-const API_URL = "http://10.119.77.98:8000"; // Update this for production
-
 interface UploadedFile {
     file: {
         name: string;
