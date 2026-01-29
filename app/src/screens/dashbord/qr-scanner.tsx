@@ -14,13 +14,33 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const QRScanner = () => {
     const [hasPermission, setHasPermission] = useState(false);
     const [isActive, setIsActive] = useState(true);
+    const [scannedData, setScannedData] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
     const { linkDevice } = useSocket();
 
     const device = useCameraDevice('back');
 
     const sendLinkDevice = async (socketId: string) => {
-        const token = await AsyncStorage.getItem('token') || '';
-        linkDevice(socketId, token);
+        try {
+            setIsLoading(true);
+            const token = await AsyncStorage.getItem('token') || '';
+            const success = linkDevice(socketId, token);
+            setScannedData(socketId);
+            if (!success) {
+                throw new Error('Failed to link device');
+            }
+        } catch (error) {
+            console.error('Error linking device:', error);
+            resetScan();
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    const resetScan = () => {
+        setIsActive(true);
+        setScannedData(null);
+        setIsLoading(false);
     }
 
     // Code scanner configuration
@@ -98,6 +118,31 @@ const QRScanner = () => {
                         <View style={[styles.corner, styles.bottomRight]} />
                     </View>
                     <View style={styles.sideOverlay} />
+                </View>
+
+                {/* Bottom Overlay */}
+                <View style={styles.bottomOverlay}>
+                    {!scannedData ? (
+                        <Text style={styles.instructionText}>
+                            Point your camera at a QR code to link your device
+                        </Text>
+                    ) : (
+                        <View style={styles.resultContainer}>
+                            <Text style={styles.resultText}>
+                                ✓ Device linked successfully!{`\n`}
+                                ID: {scannedData}
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.scanAgainButton}
+                                onPress={resetScan}
+                                disabled={isLoading}
+                            >
+                                <Text style={styles.scanAgainText}>
+                                    {isLoading ? 'Linking...' : 'Scan Again'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
                 </View>
             </View>
         </View>

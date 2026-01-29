@@ -238,23 +238,25 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     );
 
     const linkDevice = useCallback(
-    (socketId: string, token: string): boolean => {
-        if (!socketId || !token) {
-            console.error('SocketId or token missing for linkDevice');
-            return false;
-        }
+        (socketId: string, token: string): boolean => {
+            if (!socketId || !token) {
+                console.error('SocketId or token missing for linkDevice');
+                return false;
+            }
+            if (!socketId.trim() || !token.trim()) {
+                console.error('Socket not initialized for linkDevice');
+                return false;
+            }
+            if (!socketRef.current?.connected) {
+                console.warn('Socket not connected for linkDevice');
+                return false;
+            }
 
-        const socket = socketRef.current;
-        if (!socket) {
-            console.error('Socket not initialized for linkDevice');
-            return false;
-        }
-
-        socket.emit('linkDevice', { socketId, token });
-        return true;
-    },
-    []
-);
+            socketRef.current.emit('LinkDevice', { socketId, token });
+            return true;
+        },
+        []
+    );
 
 
     // Register message callback

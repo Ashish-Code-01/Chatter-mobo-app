@@ -16,7 +16,7 @@ function App() {
             console.log("Connected:", socket.id);
         });
 
-        socket.on("DeviceLinked", (token) => {
+        socket.on("linkDevice", (token) => {
             console.log("Device Token:", token);
             // Store in state instead of localStorage
             console.log("Token would be stored:", token);

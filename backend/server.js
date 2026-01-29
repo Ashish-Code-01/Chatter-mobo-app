@@ -88,11 +88,36 @@ io.on("connection", (socket) => {
         }
     });
 
-    io.on("LinkDevice", (socketId, token) => {
-        if (!token) return;
-        linkdevices.set(socket.id);
-        io.to(socketId).emit("DeviceLinked", { token });
+    // Listen for device linking request
+    socket.on("LinkDevice", ({ socketId, token }) => {
+        if (!socketId || !token) {
+            console.log("Invalid LinkDevice payload");
+            return;
+        }
 
+        // Check if target socket exists
+        const targetSocket = io.sockets.sockets.get(socketId);
+        if (!targetSocket) {
+            console.log("Target socket not found:", socketId);
+            return;
+        }
+
+        // Store the linked device
+        linkdevices.set(socket.id, token);
+
+        // Notify target device
+        io.to(socketId).emit("DeviceLinked", {
+            token,
+            linkedSocketId: socket.id
+        });
+
+        console.log(`Device ${socket.id} linked to ${socketId}`);
+    });
+
+    // Cleanup on disconnect
+    socket.on("disconnect", () => {
+        linkdevices.delete(socket.id);
+        console.log("Client disconnected:", socket.id);
     });
 
     // Handle disconnect
