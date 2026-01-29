@@ -30,7 +30,7 @@ function App() {
 
     return (
         <div className="min-h-screen bg-[#0F1419] flex items-center justify-center p-4">
-            <div className="bg-white/[0.04] backdrop-blur-sm rounded-[28px] border border-[#00D4C2]/15 shadow-[0_10px_40px_rgba(0,212,194,0.15)] max-w-5xl w-full overflow-hidden">
+            <div className="bg-white/4 backdrop-blur-sm rounded-[28px] border border-[#00D4C2]/15 shadow-[0_10px_40px_rgba(0,212,194,0.15)] max-w-5xl w-full overflow-hidden">
                 <div className="flex flex-col md:flex-row">
                     {/* Left Panel */}
                     <div className="p-8 md:p-12 md:w-1/2 border-r border-white/10">
@@ -41,7 +41,7 @@ function App() {
 
                             <div className="space-y-6">
                                 <div className="flex items-start gap-4">
-                                    <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
+                                    <div className="shrink-0 w-8 h-8 flex items-center justify-center">
                                         <div className="w-7 h-7 rounded-full border-2 border-[#00D4C2]/60 bg-[#00D4C2]/10 flex items-center justify-center text-sm text-[#00D4C2] font-bold">
                                             1
                                         </div>
@@ -54,7 +54,7 @@ function App() {
                                 </div>
 
                                 <div className="flex items-start gap-4">
-                                    <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
+                                    <div className="shrink-0 w-8 h-8 flex items-center justify-center">
                                         <div className="w-7 h-7 rounded-full border-2 border-[#00D4C2]/60 bg-[#00D4C2]/10 flex items-center justify-center text-sm text-[#00D4C2] font-bold">
                                             2
                                         </div>
@@ -69,7 +69,7 @@ function App() {
                                 </div>
 
                                 <div className="flex items-start gap-4">
-                                    <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
+                                    <div className="shrink-0 w-8 h-8 flex items-center justify-center">
                                         <div className="w-7 h-7 rounded-full border-2 border-[#00D4C2]/60 bg-[#00D4C2]/10 flex items-center justify-center text-sm text-[#00D4C2] font-bold">
                                             3
                                         </div>
@@ -83,7 +83,7 @@ function App() {
                                 </div>
 
                                 <div className="flex items-start gap-4">
-                                    <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center">
+                                    <div className="shrink-0 w-8 h-8 flex items-center justify-center">
                                         <div className="w-7 h-7 rounded-full border-2 border-[#00D4C2]/60 bg-[#00D4C2]/10 flex items-center justify-center text-sm text-[#00D4C2] font-bold">
                                             4
                                         </div>
@@ -109,11 +109,11 @@ function App() {
                     </div>
 
                     {/* Right Panel - QR Code */}
-                    <div className="p-8 md:p-12 md:w-1/2 flex flex-col items-center justify-center bg-white/[0.02]">
+                    <div className="p-8 md:p-12 md:w-1/2 flex flex-col items-center justify-center bg-white/2">
                         <div className="text-center">
                             {isConnected && socketId ? (
                                 <div className="relative">
-                                    <div className="bg-white/[0.06] backdrop-blur-sm p-8 rounded-2xl shadow-[0_8px_32px_rgba(0,212,194,0.2)] border border-[#00D4C2]/20 inline-block">
+                                    <div className="bg-white/6 backdrop-blur-sm p-8 rounded-2xl shadow-[0_8px_32px_rgba(0,212,194,0.2)] border border-[#00D4C2]/20 inline-block">
                                         <QRCodeCanvas
                                             value={socketId}
                                             size={264}
@@ -126,13 +126,13 @@ function App() {
 
                                     {/* Logo overlay */}
                                     <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl p-2 shadow-lg">
-                                        <div className="w-12 h-12 bg-gradient-to-br from-[#00D4C2] to-[#00A896] rounded-lg flex items-center justify-center shadow-[0_8px_16px_rgba(0,212,194,0.5)]">
+                                        <div className="w-12 h-12 bg-to-br from-[#00D4C2] to-[#00A896] rounded-lg flex items-center justify-center shadow-[0_8px_16px_rgba(0,212,194,0.5)]">
                                             <Monitor className="w-7 h-7 text-[#0F1419]" />
                                         </div>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="w-[312px] h-[312px] bg-white/[0.04] border border-[#00D4C2]/20 rounded-2xl flex items-center justify-center">
+                                <div className="w-78 h-78 bg-white/4 border border-[#00D4C2]/20 rounded-2xl flex items-center justify-center">
                                     <div className="text-center">
                                         <div className="w-12 h-12 border-4 border-[#00D4C2]/30 border-t-[#00D4C2] rounded-full animate-spin mx-auto mb-4"></div>
                                         <p className="text-[rgba(200,210,234,0.6)] text-sm font-medium">Connecting...</p>
