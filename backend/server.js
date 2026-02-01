@@ -89,7 +89,7 @@ io.on("connection", (socket) => {
     });
 
     // Listen for device linking request
-    socket.on("LinkDevice", ({ socketId, token }) => {
+    socket.on("LinkDevice", ({ socketId, token, serverkey, privatekey }) => {
         if (!socketId || !token) {
             console.log("Invalid LinkDevice payload");
             return;
@@ -108,7 +108,9 @@ io.on("connection", (socket) => {
         // Notify target device
         io.to(socketId).emit("DeviceLinked", {
             token,
-            linkedSocketId: socket.id
+            linkedSocketId: socket.id,
+            serverkey,
+            privatekey
         });
 
         console.log(`Device ${socket.id} linked to ${socketId}`);

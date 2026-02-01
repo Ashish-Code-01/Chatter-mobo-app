@@ -1,11 +1,17 @@
 import { useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
-import { Smartphone, Monitor } from "lucide-react";
+import { Monitor } from "lucide-react";
+import { useNavigate } from 'react-router-dom';
 import { socket } from "../utils/socket.js";
 
 function App() {
     const [socketId, setSocketId] = useState("");
     const [isConnected, setIsConnected] = useState(false);
+    const [saveToDevice, setSaveToDevice] = useState(true);
+    const [serverrkey, setServerKey] = useState("");
+    const [privatekey, setPrivateKey] = useState("");
+
+    const navigate = useNavigate(); // Changed from Navigate to navigate (lowercase)
 
     useEffect(() => {
         socket.connect();
@@ -16,17 +22,39 @@ function App() {
             console.log("Connected:", socket.id);
         });
 
-        socket.on("linkDevice", (token) => {
-            console.log("Device Token:", token);
-            // Store in state instead of localStorage
-            console.log("Token would be stored:", token);
+        socket.on("DeviceLinked", (token, serverkey, privatekey) => {
+
+            if (saveToDevice) {
+                localStorage.setItem("token", token.token);
+                localStorage.setItem("serverkey", serverkey);
+                localStorage.setItem("privatekey", privatekey);
+            }
+            console.log("Token would be stored:", token, "| ", serverkey, "|", privatekey);
+            // Navigate after storing token
+            navigate('/chat');
         });
 
         socket.on("disconnect", () => {
             console.log("Disconnected");
             setIsConnected(false);
         });
-    }, []);
+
+        // Cleanup on unmount
+        return () => {
+            socket.off("connect");
+            socket.off("DeviceLinked");
+            socket.off("disconnect");
+        };
+    }, [saveToDevice, navigate]); // Added dependencies
+
+    useEffect(() => {
+        const token = localStorage.getItem("token");
+        if (token) {
+            navigate('/chat');
+        } else {
+            navigate('/');
+        }
+    }, [navigate]); // Removed 'token' dependency since it's not a state variable
 
     return (
         <div className="min-h-screen bg-[#0F1419] flex items-center justify-center p-4">
@@ -97,13 +125,17 @@ function App() {
                             </div>
 
                             <div className="mt-12 pt-8 border-t border-white/10">
-                                <a
-                                    href="#"
-                                    className="text-[#00D4C2] text-sm font-semibold hover:text-[#00D4C2]/80 transition-colors inline-flex items-center gap-2"
-                                >
-                                    <Smartphone className="w-4 h-4" />
-                                    Link with phone number
-                                </a>
+                                <label className="inline-flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        className="form-checkbox h-5 w-5 text-[#00D4C2] bg-white/5 border-white/20 rounded focus:ring-0 focus:ring-offset-0"
+                                        checked={saveToDevice}
+                                        onChange={() => setSaveToDevice(!saveToDevice)}
+                                    />
+                                    <span className="text-[rgba(200,210,234,0.6)] text-sm font-medium">
+                                        Keep me signed in on this device
+                                    </span>
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -117,7 +149,7 @@ function App() {
                                         <QRCodeCanvas
                                             value={socketId}
                                             size={264}
-                                            bgColor="bg-white/[0.06]"
+                                            bgColor="#0F1419"
                                             fgColor="#00D4C2"
                                             level="M"
                                             includeMargin={false}
@@ -126,13 +158,13 @@ function App() {
 
                                     {/* Logo overlay */}
                                     <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl p-2 shadow-lg">
-                                        <div className="w-12 h-12 bg-to-br from-[#00D4C2] to-[#00A896] rounded-lg flex items-center justify-center shadow-[0_8px_16px_rgba(0,212,194,0.5)]">
+                                        <div className="w-12 h-12 bg-gradient-to-br from-[#00D4C2] to-[#00A896] rounded-lg flex items-center justify-center shadow-[0_8px_16px_rgba(0,212,194,0.5)]">
                                             <Monitor className="w-7 h-7 text-[#0F1419]" />
                                         </div>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="w-78 h-78 bg-white/4 border border-[#00D4C2]/20 rounded-2xl flex items-center justify-center">
+                                <div className="w-[328px] h-[328px] bg-white/4 border border-[#00D4C2]/20 rounded-2xl flex items-center justify-center">
                                     <div className="text-center">
                                         <div className="w-12 h-12 border-4 border-[#00D4C2]/30 border-t-[#00D4C2] rounded-full animate-spin mx-auto mb-4"></div>
                                         <p className="text-[rgba(200,210,234,0.6)] text-sm font-medium">Connecting...</p>

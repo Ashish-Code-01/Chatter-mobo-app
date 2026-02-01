@@ -11,7 +11,7 @@ import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-cam
 import { useSocket } from '../../context/socketcontext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const QRScanner = () => {
+const QRScanner = ({ navigation }) => {
     const [hasPermission, setHasPermission] = useState(false);
     const [isActive, setIsActive] = useState(true);
     const [scannedData, setScannedData] = useState<string | null>(null);
@@ -24,11 +24,16 @@ const QRScanner = () => {
         try {
             setIsLoading(true);
             const token = await AsyncStorage.getItem('token') || '';
-            const success = linkDevice(socketId, token);
+            const privatekey = await AsyncStorage.getItem("privatekey");
+            const serverkey = await AsyncStorage.getItem("serverkey");
             setScannedData(socketId);
+            const success = await linkDevice(socketId, token, privatekey, serverkey);
+
             if (!success) {
                 throw new Error('Failed to link device');
             }
+
+            navigation.navigate('LinkDevicesScreen');
         } catch (error) {
             console.error('Error linking device:', error);
             resetScan();
