@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, MoreVertical, Send, Paperclip, Smile, Phone, Video, Menu, User, ArrowLeft } from 'lucide-react';
+import axios from 'axios';
 
 const API_URL = "https://chatter-mobo-app.onrender.com";
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dqmxpgv5k/image/upload/v1765892967/A_circular_default_c_cafouy.png";
@@ -18,6 +19,10 @@ const ChatScreen = () => {
     const [contactIsOnline, setContactIsOnline] = useState(false);
     const [contactAvatar, setContactAvatar] = useState('');
     const [chats, setChats] = useState([]);
+    const [unseenMessages, setUnseenMessages] = useState({});
+    const [contactStatusMap, setContactStatusMap] = useState({});
+    const [searchQuery, setSearchQuery] = useState('');
+    const [user, setUser] = useState(null);
 
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -25,6 +30,7 @@ const ChatScreen = () => {
     const alphabet = useMemo(() => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!'_-&@#$%*()/:<>|+= ", []);
     const chatId = useMemo(() => `chat_${[myPhone, contactPhone].sort().join("_")}`, [myPhone, contactPhone]);
 
+    // Check authentication
     useEffect(() => {
         if (localStorage.getItem("token") === null) {
             navigate('/');
@@ -94,26 +100,60 @@ const ChatScreen = () => {
         return decryptedText;
     }, [alphabet]);
 
-    // Fetch contact status
-    const fetchContactStatus = useCallback(async () => {
+    // Fetch current user
+    const fetchCurrentUser = useCallback(async () => {
         try {
-            const response = await fetch(`${API_URL}/api/online/status/${contactPhone}`);
-            const data = await response.json();
-            if (data?.success) {
-                setContactIsOnline(data.data.isOnline);
+            const token = localStorage.getItem("token");
+            if (!token) return;
+
+            const savedUser = localStorage.getItem("User");
+
+            if (savedUser) {
+                const parsed = JSON.parse(savedUser);
+                setUser(parsed);
+            } else {
+                const { data } = await axios.post(
+                    `${API_URL}/auth/me`,
+                    {},
+                    { headers: { token } }
+                );
+
+                if (data?.user) {
+                    setUser(data.user);
+                    localStorage.setItem("User", JSON.stringify(data.user));
+                }
             }
         } catch (error) {
-            console.error("Error fetching contact status:", error);
+            console.error("Error fetching current user:", error);
+        }
+    }, []);
+
+    // Fetch contact status
+    const fetchContactStatus = useCallback(async (phone) => {
+        try {
+            const response = await axios.get(`${API_URL}/api/online/status/${phone}`);
+            if (response.data?.success) {
+                setContactStatusMap(prev => ({
+                    ...prev,
+                    [phone]: response.data.data.isOnline
+                }));
+
+                // If this is the selected contact, update their status too
+                if (phone === contactPhone) {
+                    setContactIsOnline(response.data.data.isOnline);
+                }
+            }
+        } catch (error) {
+            console.error(`Error fetching contact status for ${phone}:`, error);
         }
     }, [contactPhone]);
 
     // Fetch contact avatar
     const fetchContactAvatar = useCallback(async () => {
         try {
-            const response = await fetch(`${API_URL}/auth/user/${contactPhone}`);
-            const data = await response.json();
-            if (data?.success && data?.data?.avatar) {
-                setContactAvatar(data.data.avatar);
+            const response = await axios.get(`${API_URL}/auth/user/${contactPhone}`);
+            if (response.data?.success && response.data?.data?.avatar) {
+                setContactAvatar(response.data.data.avatar);
             } else {
                 setContactAvatar(DEFAULT_AVATAR);
             }
@@ -123,22 +163,93 @@ const ChatScreen = () => {
         }
     }, [contactPhone]);
 
+    // Fetch all contacts/users
+    const fetchAllContacts = useCallback(async () => {
+        try {
+            const token = localStorage.getItem("token");
+            if (!token) return;
+
+            // Get contacts from localStorage
+            const savedContacts = localStorage.getItem("Users");
+            let contacts = savedContacts ? JSON.parse(savedContacts) : [];
+
+            // Fetch unseen messages
+            const { data: msgData } = await axios.post(
+                `${API_URL}/api/messages/get/msg/all`,
+                {},
+                { headers: { token } }
+            );
+
+            if (msgData?.success) {
+                const grouped = {};
+                msgData.data.forEach((msg) => {
+                    if (!msg.seen) {
+                        grouped[msg.sender] = (grouped[msg.sender] || 0) + 1;
+                    }
+                });
+                setUnseenMessages(grouped);
+            }
+
+            // Transform contacts to chat format
+            const formattedChats = contacts.map(contact => {
+                const initials = contact.name
+                    .split(' ')
+                    .map(n => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2);
+
+                return {
+                    id: contact.id,
+                    name: contact.name,
+                    phone: contact.phone,
+                    avatar: initials,
+                    lastMessage: 'Tap to start chatting',
+                    time: '',
+                    unread: unseenMessages[contact.phone] || 0
+                };
+            });
+
+            setChats(formattedChats);
+
+            // Fetch status for all contacts
+            for (const contact of contacts) {
+                await fetchContactStatus(contact.phone);
+            }
+
+            // Set selected chat if coming from navigation
+            if (contactPhone) {
+                const chat = formattedChats.find(c => c.phone === contactPhone) || {
+                    id: Date.now(),
+                    name: contactName || contactPhone,
+                    phone: contactPhone,
+                    avatar: contactName ? contactName.split(' ').map(n => n[0]).join('').toUpperCase() : 'U'
+                };
+                setSelectedChat(chat);
+            }
+        } catch (error) {
+            console.error("Error fetching contacts:", error);
+        }
+    }, [contactPhone, contactName, unseenMessages, fetchContactStatus]);
+
     // Fetch messages from backend
     const fetchMessagesFromBackend = useCallback(async () => {
         try {
             const token = localStorage.getItem("token");
             if (!token) return;
 
-            const response = await fetch(`${API_URL}/api/messages/get/${contactPhone}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'token': token
-                },
-                body: JSON.stringify({})
-            });
+            const response = await axios.post(
+                `${API_URL}/api/messages/get/${contactPhone}`,
+                {},
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'token': token
+                    }
+                }
+            );
 
-            const res = await response.json();
+            const res = response.data;
             const raw = res.data || [];
             const secretkey = localStorage.getItem("secretkey");
 
@@ -146,14 +257,14 @@ const ChatScreen = () => {
                 try {
                     const decryptedContent = decryptMessage(msg.content, secretkey);
                     return {
-                        from: msg.sender === myPhone ? "Me" : msg.sender,
+                        from: msg.sender === user?.phoneNumber ? "Me" : msg.sender,
                         message: decryptedContent,
                         timestamp: new Date(msg.createdAt).getTime(),
                     };
                 } catch (error) {
                     console.error("Error decrypting message:", error);
                     return {
-                        from: msg.sender === myPhone ? "Me" : msg.sender,
+                        from: msg.sender === user?.phoneNumber ? "Me" : msg.sender,
                         message: "[Decryption failed]",
                         timestamp: new Date(msg.createdAt).getTime(),
                     };
@@ -170,7 +281,7 @@ const ChatScreen = () => {
         } catch (error) {
             console.error("Error fetching messages:", error);
         }
-    }, [contactPhone, myPhone, chatId, decryptMessage, dedupeMessages]);
+    }, [contactPhone, user, chatId, decryptMessage, dedupeMessages]);
 
     // Mark messages as seen
     const markMessagesSeen = useCallback(async () => {
@@ -178,14 +289,16 @@ const ChatScreen = () => {
             const token = localStorage.getItem("token");
             if (!token) return;
 
-            await fetch(`${API_URL}/api/messages/seen`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'token': token
-                },
-                body: JSON.stringify({ receiverPhoneNumber: contactPhone })
-            });
+            await axios.post(
+                `${API_URL}/api/messages/seen`,
+                { receiverPhoneNumber: contactPhone },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'token': token
+                    }
+                }
+            );
         } catch (error) {
             console.error("Error marking messages as seen:", error);
         }
@@ -195,15 +308,20 @@ const ChatScreen = () => {
     useEffect(() => {
         const loadData = async () => {
             try {
-                const local = localStorage.getItem(chatId);
-                if (local) {
-                    setMessages(JSON.parse(local));
-                }
+                await fetchCurrentUser();
+                await fetchAllContacts();
 
-                await fetchContactStatus();
-                await fetchContactAvatar();
-                await fetchMessagesFromBackend();
-                await markMessagesSeen();
+                if (contactPhone) {
+                    const local = localStorage.getItem(chatId);
+                    if (local) {
+                        setMessages(JSON.parse(local));
+                    }
+
+                    await fetchContactStatus(contactPhone);
+                    await fetchContactAvatar();
+                    await fetchMessagesFromBackend();
+                    await markMessagesSeen();
+                }
             } catch (error) {
                 console.error("Error during initial load:", error);
             } finally {
@@ -211,10 +329,8 @@ const ChatScreen = () => {
             }
         };
 
-        if (contactPhone && myPhone) {
-            loadData();
-        }
-    }, [contactPhone, myPhone, chatId, fetchContactStatus, fetchContactAvatar, fetchMessagesFromBackend, markMessagesSeen]);
+        loadData();
+    }, [contactPhone, chatId, fetchCurrentUser, fetchAllContacts, fetchContactStatus, fetchContactAvatar, fetchMessagesFromBackend, markMessagesSeen]);
 
     // Auto-scroll to bottom
     useEffect(() => {
@@ -266,8 +382,22 @@ const ChatScreen = () => {
 
             const publickey = keyToUse.substring(0, 16);
 
-            // Send message via socket or API
-            // sendMessage(contactPhone, encryptedMsg, publickey);
+            // Send message via API
+            const token = localStorage.getItem("token");
+            await axios.post(
+                `${API_URL}/api/messages/send`,
+                {
+                    receiver: contactPhone,
+                    content: encryptedMsg,
+                    publicKey: publickey
+                },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'token': token
+                    }
+                }
+            );
 
         } catch (error) {
             console.error("Error sending message:", error);
@@ -296,28 +426,84 @@ const ChatScreen = () => {
         console.log('Files selected:', files);
     };
 
-    // Mock chats data
-    useEffect(() => {
-        const mockChats = [
-            { id: 1, name: 'John Doe', lastMessage: 'Hey! How are you?', time: '10:30 AM', unread: 2, avatar: 'JD', phone: '1234567890' },
-            { id: 2, name: 'Jane Smith', lastMessage: 'See you tomorrow!', time: '9:15 AM', unread: 0, avatar: 'JS', phone: '0987654321' },
-            { id: 3, name: 'Team Alpha', lastMessage: 'Meeting at 3 PM', time: 'Yesterday', unread: 5, avatar: 'TA', phone: '1112223333' },
-            { id: 4, name: 'Mom', lastMessage: 'Don\'t forget to call', time: 'Yesterday', unread: 1, avatar: 'M', phone: '4445556666' },
-            { id: 5, name: 'Alice Johnson', lastMessage: 'Thanks for the help!', time: 'Monday', unread: 0, avatar: 'AJ', phone: '7778889999' },
-        ];
-        setChats(mockChats);
+    // Handle chat selection
+    const handleChatSelect = async (chat) => {
+        setSelectedChat(chat);
+        setLoading(true);
 
-        // Set selected chat if coming from navigation
-        if (contactPhone) {
-            const chat = mockChats.find(c => c.phone === contactPhone) || {
-                id: Date.now(),
-                name: contactName || contactPhone,
-                phone: contactPhone,
-                avatar: contactName ? contactName.split(' ').map(n => n[0]).join('').toUpperCase() : 'U'
-            };
-            setSelectedChat(chat);
+        try {
+            // Load messages for this chat
+            const chatIdForContact = `chat_${[user?.phoneNumber, chat.phone].sort().join("_")}`;
+            const local = localStorage.getItem(chatIdForContact);
+            if (local) {
+                setMessages(JSON.parse(local));
+            } else {
+                setMessages([]);
+            }
+
+            // Fetch contact status and avatar
+            await fetchContactStatus(chat.phone);
+
+            const response = await axios.get(`${API_URL}/auth/user/${chat.phone}`);
+            if (response.data?.success && response.data?.data?.avatar) {
+                setContactAvatar(response.data.data.avatar);
+            } else {
+                setContactAvatar(DEFAULT_AVATAR);
+            }
+
+            // Fetch messages from backend
+            const token = localStorage.getItem("token");
+            const msgResponse = await axios.post(
+                `${API_URL}/api/messages/get/${chat.phone}`,
+                {},
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'token': token
+                    }
+                }
+            );
+
+            const raw = msgResponse.data.data || [];
+            const secretkey = localStorage.getItem("secretkey");
+
+            const backendMsgs = raw.map((msg) => {
+                try {
+                    const decryptedContent = decryptMessage(msg.content, secretkey);
+                    return {
+                        from: msg.sender === user?.phoneNumber ? "Me" : msg.sender,
+                        message: decryptedContent,
+                        timestamp: new Date(msg.createdAt).getTime(),
+                    };
+                } catch (error) {
+                    return {
+                        from: msg.sender === user?.phoneNumber ? "Me" : msg.sender,
+                        message: "[Decryption failed]",
+                        timestamp: new Date(msg.createdAt).getTime(),
+                    };
+                }
+            });
+
+            setMessages(backendMsgs.sort((a, b) => a.timestamp - b.timestamp));
+
+            // Mark as seen
+            await axios.post(
+                `${API_URL}/api/messages/seen`,
+                { receiverPhoneNumber: chat.phone },
+                {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'token': token
+                    }
+                }
+            );
+
+        } catch (error) {
+            console.error("Error loading chat:", error);
+        } finally {
+            setLoading(false);
         }
-    }, [contactPhone, contactName]);
+    };
 
     const formatTime = (timestamp) => {
         return new Date(timestamp).toLocaleTimeString([], {
@@ -326,13 +512,28 @@ const ChatScreen = () => {
         });
     };
 
+    // Filter chats based on search
+    const filteredChats = useMemo(() => {
+        if (!searchQuery.trim()) return chats;
+        return chats.filter(chat =>
+            chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            chat.phone.includes(searchQuery)
+        );
+    }, [chats, searchQuery]);
+
     return (
         <div className='w-screen h-screen bg-[#0F1419] flex flex-col'>
             {/* Header */}
             <div className='h-16 flex items-center justify-between px-6 bg-[#1a1f2e]'>
                 <h1 className='text-white font-bold text-2xl'>Chatter</h1>
                 <div className='flex items-center gap-5'>
-                    <button className='text-[#00D4C2] hover:text-[#00D4C2]/80 transition-colors'>
+                    {user && (
+                        <span className='text-gray-400 text-sm'>Hi, {user.name}</span>
+                    )}
+                    <button
+                        onClick={() => navigate('/profile')}
+                        className='text-[#00D4C2] hover:text-[#00D4C2]/80 transition-colors'
+                    >
                         <User size={22} />
                     </button>
                     <button className='text-[#00D4C2] hover:text-[#00D4C2]/80 transition-colors'>
@@ -352,6 +553,8 @@ const ChatScreen = () => {
                             <input
                                 type='text'
                                 placeholder='Search chats...'
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
                                 className='w-full bg-[#0F1419] text-white pl-10 pr-4 py-2.5 rounded-lg border border-[#00D4C2]/20 focus:outline-none focus:border-[#00D4C2]/50 transition-colors'
                             />
                         </div>
@@ -359,37 +562,53 @@ const ChatScreen = () => {
 
                     {/* Chat List */}
                     <div className='flex-1 overflow-y-auto'>
-                        {chats.map(chat => (
-                            <div
-                                key={chat.id}
-                                onClick={() => setSelectedChat(chat)}
-                                className={`px-5 py-4 border-b border-white/10 cursor-pointer hover:bg-[#0F1419]/50 transition-colors ${selectedChat?.id === chat.id ? 'bg-[#0F1419]' : ''
-                                    }`}
-                            >
-                                <div className='flex items-center gap-3'>
-                                    {/* Avatar */}
-                                    <div className='w-12 h-12 rounded-full bg-[#00D4C2] flex items-center justify-center text-[#0F1419] font-bold flex-shrink-0'>
-                                        {chat.avatar}
-                                    </div>
-
-                                    {/* Chat Info */}
-                                    <div className='flex-1 min-w-0'>
-                                        <div className='flex items-center justify-between mb-1'>
-                                            <h3 className='text-white font-semibold truncate'>{chat.name}</h3>
-                                            <span className='text-xs text-gray-400 ml-2'>{chat.time}</span>
-                                        </div>
-                                        <div className='flex items-center justify-between gap-2'>
-                                            <p className='text-sm text-gray-400 truncate flex-1'>{chat.lastMessage}</p>
-                                            {chat.unread > 0 && (
-                                                <span className='bg-[#00D4C2] text-[#0F1419] text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5'>
-                                                    {chat.unread}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
+                        {filteredChats.length === 0 ? (
+                            <div className='text-center text-gray-400 mt-20'>
+                                No contacts found
                             </div>
-                        ))}
+                        ) : (
+                            filteredChats.map(chat => {
+                                const isOnline = contactStatusMap[chat.phone] || false;
+                                const unreadCount = unseenMessages[chat.phone] || 0;
+
+                                return (
+                                    <div
+                                        key={chat.id}
+                                        onClick={() => handleChatSelect(chat)}
+                                        className={`px-5 py-4 border-b border-white/10 cursor-pointer hover:bg-[#0F1419]/50 transition-colors ${selectedChat?.id === chat.id ? 'bg-[#0F1419]' : ''
+                                            }`}
+                                    >
+                                        <div className='flex items-center gap-3'>
+                                            {/* Avatar */}
+                                            <div className='w-12 h-12 rounded-full bg-[#00D4C2] flex items-center justify-center text-[#0F1419] font-bold flex-shrink-0'>
+                                                {chat.avatar}
+                                            </div>
+
+                                            {/* Chat Info */}
+                                            <div className='flex-1 min-w-0'>
+                                                <div className='flex items-center justify-between mb-1'>
+                                                    <h3 className='text-white font-semibold truncate'>{chat.name}</h3>
+                                                    <span className='text-xs text-gray-400 ml-2'>{chat.time}</span>
+                                                </div>
+                                                <div className='flex items-center justify-between gap-2'>
+                                                    <div className='flex items-center gap-2 flex-1 min-w-0'>
+                                                        <p className='text-sm text-gray-400 truncate'>{chat.phone}</p>
+                                                        <span className={`text-xs ${isOnline ? 'text-[#00D4C2]' : 'text-gray-500'}`}>
+                                                            {isOnline ? '● Online' : '● Offline'}
+                                                        </span>
+                                                    </div>
+                                                    {unreadCount > 0 && (
+                                                        <span className='bg-[#00D4C2] text-[#0F1419] text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5'>
+                                                            {unreadCount}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
                     </div>
                 </div>
 
@@ -415,8 +634,8 @@ const ChatScreen = () => {
                                     )}
                                     <div>
                                         <h2 className='text-white font-semibold text-lg'>{selectedChat.name}</h2>
-                                        <p className={`text-xs mt-0.5 ${contactIsOnline ? 'text-[#00D4C2]' : 'text-gray-400'}`}>
-                                            {contactIsOnline ? '● Online' : '● Offline'}
+                                        <p className={`text-xs mt-0.5 ${contactStatusMap[selectedChat.phone] ? 'text-[#00D4C2]' : 'text-gray-400'}`}>
+                                            {contactStatusMap[selectedChat.phone] ? '● Online' : '● Offline'}
                                         </p>
                                     </div>
                                 </div>
@@ -433,7 +652,7 @@ const ChatScreen = () => {
                                 </div>
                             </div>
 
-                            {/* Messages Area - FIXED PADDING */}
+                            {/* Messages Area */}
                             {loading ? (
                                 <div className='flex-1 flex items-center justify-center'>
                                     <div className='text-[#00D4C2] text-lg'>Loading...</div>
@@ -441,27 +660,33 @@ const ChatScreen = () => {
                             ) : (
                                 <div className='flex-1 overflow-y-auto'>
                                     <div className='px-6 py-6 space-y-4'>
-                                        {messages.map((msg, index) => {
-                                            const isMe = msg.from === 'Me';
-                                            return (
-                                                <div
-                                                    key={`${msg.timestamp}_${index}`}
-                                                    className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
-                                                >
+                                        {messages.length === 0 ? (
+                                            <div className='text-center text-gray-400 mt-20'>
+                                                No messages yet. Start a conversation!
+                                            </div>
+                                        ) : (
+                                            messages.map((msg, index) => {
+                                                const isMe = msg.from === 'Me';
+                                                return (
                                                     <div
-                                                        className={`max-w-[70%] rounded-2xl px-4 py-3 ${isMe
-                                                            ? 'bg-[#00D4C2] text-[#0F1419]'
-                                                            : 'bg-[#1a1f2e] text-white border border-[#00D4C2]/20'
-                                                            }`}
+                                                        key={`${msg.timestamp}_${index}`}
+                                                        className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
                                                     >
-                                                        <p className='text-sm leading-relaxed'>{msg.message}</p>
-                                                        <span className='text-xs opacity-70 mt-1.5 block'>
-                                                            {formatTime(msg.timestamp)}
-                                                        </span>
+                                                        <div
+                                                            className={`max-w-[70%] rounded-2xl px-4 py-3 ${isMe
+                                                                    ? 'bg-[#00D4C2] text-[#0F1419]'
+                                                                    : 'bg-[#1a1f2e] text-white border border-[#00D4C2]/20'
+                                                                }`}
+                                                        >
+                                                            <p className='text-sm leading-relaxed'>{msg.message}</p>
+                                                            <span className='text-xs opacity-70 mt-1.5 block'>
+                                                                {formatTime(msg.timestamp)}
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            );
-                                        })}
+                                                );
+                                            })
+                                        )}
                                         <div ref={messagesEndRef} />
                                     </div>
                                 </div>
@@ -499,8 +724,8 @@ const ChatScreen = () => {
                                         onClick={handleSendMessage}
                                         disabled={!message.trim()}
                                         className={`p-3 rounded-lg transition-colors ${message.trim()
-                                            ? 'bg-[#00D4C2] text-[#0F1419] hover:bg-[#00D4C2]/90'
-                                            : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                                                ? 'bg-[#00D4C2] text-[#0F1419] hover:bg-[#00D4C2]/90'
+                                                : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                                             }`}
                                     >
                                         <Send size={20} />

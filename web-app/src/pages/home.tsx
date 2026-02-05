@@ -8,8 +8,6 @@ function App() {
     const [socketId, setSocketId] = useState("");
     const [isConnected, setIsConnected] = useState(false);
     const [saveToDevice, setSaveToDevice] = useState(true);
-    const [serverrkey, setServerKey] = useState("");
-    const [privatekey, setPrivateKey] = useState("");
 
     const navigate = useNavigate(); // Changed from Navigate to navigate (lowercase)
 
@@ -22,14 +20,15 @@ function App() {
             console.log("Connected:", socket.id);
         });
 
-        socket.on("DeviceLinked", (token, serverkey, privatekey) => {
+        socket.on("DeviceLinked", (token, serverkey, privatekey, Users) => {
 
             if (saveToDevice) {
                 localStorage.setItem("token", token.token);
-                localStorage.setItem("serverkey", serverkey);
-                localStorage.setItem("privatekey", privatekey);
+                localStorage.setItem("serverkey", token.serverkey);
+                localStorage.setItem("privatekey", token.privatekey);
+                localStorage.setItem("Users", JSON.stringify(Users));
             }
-            console.log("Token would be stored:", token, "| ", serverkey, "|", privatekey);
+            console.log("Token would be stored:", token, "| ", serverkey, "|", privatekey , "|", Users);
             // Navigate after storing token
             navigate('/chat');
         });

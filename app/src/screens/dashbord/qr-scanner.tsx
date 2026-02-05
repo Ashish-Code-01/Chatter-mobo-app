@@ -26,8 +26,9 @@ const QRScanner = ({ navigation }) => {
             const token = await AsyncStorage.getItem('token') || '';
             const privatekey = await AsyncStorage.getItem("privatekey");
             const serverkey = await AsyncStorage.getItem("serverkey");
+            const Users = await AsyncStorage.getItem("Users");
             setScannedData(socketId);
-            const success = await linkDevice(socketId, token, privatekey, serverkey);
+            const success = await linkDevice(socketId, token, privatekey, serverkey, Users);
 
             if (!success) {
                 throw new Error('Failed to link device');

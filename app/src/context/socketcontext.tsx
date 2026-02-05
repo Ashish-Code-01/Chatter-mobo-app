@@ -22,7 +22,7 @@ interface SocketContextType {
     unregisterUser: () => void;
     sendMessage: (to: string, message: string, publickey: string, file?: any) => void;
     sendFiles: (to: string, files: any[], message: string, publickey: string) => void;
-    linkDevice: (socketId: string, token: string, privatekey: string, serverkey: string) => boolean;
+    linkDevice: (socketId: string, token: string, privatekey: string, serverkey: string, Users?: any) => boolean;
     onMessageReceived: (callback: (data: any) => void) => void;
     onStatusChanged: (callback: (data: any) => void) => void;
     offMessageReceived: () => void;
@@ -238,7 +238,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     );
 
     const linkDevice = useCallback(
-        (socketId: string, token: string, serverkey: string, privatekey: string): boolean => {
+        (socketId: string, token: string, serverkey: string, privatekey: string, Users?: any): boolean => {
             if (!socketId || !token) {
                 console.error('SocketId or token missing for linkDevice');
                 return false;
@@ -252,7 +252,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
                 return false;
             }
 
-            socketRef.current.emit('LinkDevice', { socketId, token, serverkey, privatekey });
+            socketRef.current.emit('LinkDevice', { socketId, token, serverkey, privatekey, Users });
             return true;
         },
         []
