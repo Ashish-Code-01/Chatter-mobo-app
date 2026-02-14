@@ -28,46 +28,13 @@ export async function sendOTP(phoneNumber, otp) {
     }
 }
 
-export function generateServerPublicKey(length = 16) {
-    // Ensure valid length: min 1, max 16
-    length = Math.floor(Number(length)) || 16;
-    if (length < 1) length = 1;
-    if (length > 16) length = 16;
+export function formatContactPhone(phone) {
+    
+    const digits = phone.replace(/\D/g, '');
 
-    const lower = "abcdefghijklmnopqrstuvwxyz";
-    const upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const digits = "0123456789";
-    const special = "!@#$%^&*()-_=+[]{};:,.<>/?~`|";
-    const all = lower + upper + digits + special;
+    // Extract the last 10 digits (Indian mobile number)
+    const last10Digits = digits.slice(-10);
 
-    // Secure random integer generator
-    function randInt(max) {
-        if (typeof crypto !== "undefined" && crypto.getRandomValues) {
-            const arr = new Uint32Array(1);
-            crypto.getRandomValues(arr);
-            return arr[0] % max;
-        } else {
-            return Math.floor(Math.random() * max);
-        }
-    }
-
-    const password = new Array(length);
-
-    // Ensure at least one special character
-    const specialPos = randInt(length);
-    password[specialPos] = special[randInt(special.length)];
-
-    // Fill the rest with random characters
-    for (let i = 0; i < length; i++) {
-        if (i === specialPos) continue;
-        password[i] = all[randInt(all.length)];
-    }
-
-    // Shuffle to avoid predictable placement
-    for (let i = password.length - 1; i > 0; i--) {
-        const j = randInt(i + 1);
-        [password[i], password[j]] = [password[j], password[i]];
-    }
-
-    return password.join("");
+    // Return formatted number if we have exactly 10 digits, otherwise return original
+    return last10Digits.length === 10 ? `+91${last10Digits}` : phone;
 }

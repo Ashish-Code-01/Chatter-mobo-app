@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import { Monitor } from "lucide-react";
 import { useNavigate } from 'react-router-dom';
-import { socket } from "../utils/socket.js";
+import { socket, registerDevice, requestMessageSync, getOrCreateDeviceId } from "../utils/socket.js";
+import axios from "axios";
+
+const API_URL = "https://chatter-mobo-app.onrender.com";
 
 function App() {
     const [socketId, setSocketId] = useState("");
@@ -15,22 +18,113 @@ function App() {
         socket.connect();
 
         socket.on("connect", () => {
-            setSocketId(socket.id);
+            setSocketId(socket.id || "");
             setIsConnected(true);
             console.log("Connected:", socket.id);
         });
 
-        socket.on("DeviceLinked", (token, serverkey, privatekey, Users) => {
+        socket.on("DeviceLinked", async (data) => {
+            const { token, serverkey, privatekey, Users, phoneNumber } = data;
 
             if (saveToDevice) {
-                localStorage.setItem("token", token.token);
-                localStorage.setItem("serverkey", token.serverkey);
-                localStorage.setItem("privatekey", token.privatekey);
-                localStorage.setItem("Users", JSON.stringify(Users));
+                localStorage.setItem("token", token);
+                localStorage.setItem("serverkey", serverkey);
+                localStorage.setItem("privatekey", privatekey);
+                if (Users) {
+                    localStorage.setItem("Users", JSON.stringify(Users));
+                }
             }
-            console.log("Token would be stored:", token, "| ", serverkey, "|", privatekey , "|", Users);
+
+            // Get user phone number if not provided
+            let userPhone = phoneNumber;
+            if (!userPhone) {
+                try {
+                    const response = await axios.post(
+                        `${API_URL}/auth/me`,
+                        {},
+                        { headers: { token } }
+                    );
+                    if (response.data?.user) {
+                        userPhone = response.data.user.phoneNumber;
+                        localStorage.setItem("User", JSON.stringify(response.data.user));
+                    }
+                } catch (error) {
+                    console.error("Error fetching user:", error);
+                }
+            }
+
+            // Register device and request sync
+            if (userPhone) {
+                const deviceId = getOrCreateDeviceId();
+                registerDevice(userPhone, deviceId);
+
+                // Request message sync after a short delay
+                setTimeout(() => {
+                    requestMessageSync(userPhone, deviceId);
+                }, 1000);
+            }
+
+            console.log("Device linked, syncing messages...");
             // Navigate after storing token
             navigate('/chat');
+        });
+
+        // Handle bulk message sync
+        socket.on("bulkMessageSync", (data) => {
+            console.log(`Received bulk message sync batch ${data.batchIndex + 1}/${data.totalBatches}`);
+
+            // Store messages in localStorage by chatId
+            const messages = data.messages || [];
+            const secretkey = localStorage.getItem("secretkey");
+            const userPhone = localStorage.getItem("User") ? JSON.parse(localStorage.getItem("User")).phoneNumber : null;
+
+            if (!userPhone) return;
+
+            // Group messages by chat partner
+            const messagesByChat = {};
+
+            messages.forEach((msg: any) => {
+                const otherPhone = msg.sender === userPhone ? msg.receiver : msg.sender;
+                const chatId = `chat_${[userPhone, otherPhone].sort().join("_")}`;
+
+                if (!messagesByChat[chatId]) {
+                    messagesByChat[chatId] = [];
+                }
+
+                messagesByChat[chatId].push({
+                    from: msg.sender === userPhone ? "Me" : msg.sender,
+                    message: msg.content, // Store encrypted, will decrypt when displaying
+                    timestamp: new Date(msg.createdAt || msg.timestamp).getTime(),
+                    file: msg.file || undefined,
+                });
+            });
+
+            // Save messages to localStorage
+            Object.entries(messagesByChat).forEach(([chatId, chatMessages]) => {
+                const existing = localStorage.getItem(chatId);
+                const existingMessages = existing ? JSON.parse(existing) : [];
+                const merged = [...existingMessages, ...chatMessages]
+                    .sort((a, b) => a.timestamp - b.timestamp);
+
+                // Deduplicate
+                const unique = merged.filter((msg, index, self) =>
+                    index === self.findIndex((m) =>
+                        m.timestamp === msg.timestamp && m.message === msg.message
+                    )
+                );
+
+                localStorage.setItem(chatId, JSON.stringify(unique));
+            });
+
+            if (data.isLastBatch) {
+                console.log('✅ Message sync completed');
+            }
+        });
+
+        // Handle message synced from another device
+        socket.on("messageSynced", (data) => {
+            console.log('📨 Message synced from another device:', data);
+            // This will be handled in chatScreen.tsx
         });
 
         socket.on("disconnect", () => {
@@ -43,6 +137,8 @@ function App() {
             socket.off("connect");
             socket.off("DeviceLinked");
             socket.off("disconnect");
+            socket.off("bulkMessageSync");
+            socket.off("messageSynced");
         };
     }, [saveToDevice, navigate]); // Added dependencies
 
@@ -157,13 +253,13 @@ function App() {
 
                                     {/* Logo overlay */}
                                     <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl p-2 shadow-lg">
-                                        <div className="w-12 h-12 bg-gradient-to-br from-[#00D4C2] to-[#00A896] rounded-lg flex items-center justify-center shadow-[0_8px_16px_rgba(0,212,194,0.5)]">
+                                        <div className="w-12 h-12 bg-linear-to-br from-[#00D4C2] to-[#00A896] rounded-lg flex items-center justify-center shadow-[0_8px_16px_rgba(0,212,194,0.5)]">
                                             <Monitor className="w-7 h-7 text-[#0F1419]" />
                                         </div>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="w-[328px] h-[328px] bg-white/4 border border-[#00D4C2]/20 rounded-2xl flex items-center justify-center">
+                                <div className="w-82 h-82 bg-white/4 border border-[#00D4C2]/20 rounded-2xl flex items-center justify-center">
                                     <div className="text-center">
                                         <div className="w-12 h-12 border-4 border-[#00D4C2]/30 border-t-[#00D4C2] rounded-full animate-spin mx-auto mb-4"></div>
                                         <p className="text-[rgba(200,210,234,0.6)] text-sm font-medium">Connecting...</p>

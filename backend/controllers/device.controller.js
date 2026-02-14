@@ -1,5 +1,4 @@
 import User from "../models/user.model.js";
-import { generateToken } from "../lib/utils.js";
 
 // Link a new device
 export const linkDevice = async (req, res) => {

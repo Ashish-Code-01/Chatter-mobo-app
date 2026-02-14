@@ -20,13 +20,21 @@ interface SocketContextType {
     contactStatusMap: Record<string, boolean>;
     registerUser: (phoneNumber: string) => void;
     unregisterUser: () => void;
-    sendMessage: (to: string, message: string, publickey: string, file?: any) => void;
+    sendMessage: (to: string, message: string, publickey: string, file?: any, deviceId?: string) => void;
     sendFiles: (to: string, files: any[], message: string, publickey: string) => void;
-    linkDevice: (socketId: string, token: string, privatekey: string, serverkey: string, Users?: any) => boolean;
+    linkDevice: (socketId: string, token: string, privatekey: string, serverkey: string, Users?: any, deviceId?: string) => boolean;
+    registerDevice: (phoneNumber: string, deviceId: string) => void;
+    requestMessageSync: (phoneNumber: string, deviceId: string) => void;
     onMessageReceived: (callback: (data: any) => void) => void;
     onStatusChanged: (callback: (data: any) => void) => void;
+    onMessageSynced: (callback: (data: any) => void) => void;
+    onBulkMessageSync: (callback: (data: any) => void) => void;
+    onDeviceLinked: (callback: (data: any) => void) => void;
     offMessageReceived: () => void;
     offStatusChanged: () => void;
+    offMessageSynced: () => void;
+    offBulkMessageSync: () => void;
+    offDeviceLinked: () => void;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
@@ -45,6 +53,9 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     // Message and status callbacks
     const messageCallbackRef = useRef<((data: any) => void) | null>(null);
     const statusCallbackRef = useRef<((data: any) => void) | null>(null);
+    const messageSyncedCallbackRef = useRef<((data: any) => void) | null>(null);
+    const bulkMessageSyncCallbackRef = useRef<((data: any) => void) | null>(null);
+    const deviceLinkedCallbackRef = useRef<((data: any) => void) | null>(null);
 
     // Initialize Socket Connection
     useEffect(() => {
@@ -101,6 +112,29 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
             socketRef.current.on('Receivemessage', (data: any) => {
                 messageCallbackRef.current?.(data);
             });
+
+            // Message synced from another device
+            socketRef.current.on('messageSynced', (data: any) => {
+                console.log('📨 Message synced from another device:', data);
+                messageSyncedCallbackRef.current?.(data);
+            });
+
+            // Bulk message sync (when device is linked)
+            socketRef.current.on('bulkMessageSync', (data: any) => {
+                console.log(`📦 Bulk message sync batch ${data.batchIndex + 1}/${data.totalBatches}:`, data.messages.length, 'messages');
+                bulkMessageSyncCallbackRef.current?.(data);
+            });
+
+            // Device linked event
+            socketRef.current.on('DeviceLinked', (data: any) => {
+                console.log('🔗 Device linked:', data);
+                deviceLinkedCallbackRef.current?.(data);
+            });
+
+            // Sync error
+            socketRef.current.on('syncError', (data: any) => {
+                console.error('❌ Sync error:', data);
+            });
         };
 
         initSocket();
@@ -114,6 +148,10 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
                 socketRef.current.off('connect_error');
                 socketRef.current.off('userStatusChanged');
                 socketRef.current.off('Receivemessage');
+                socketRef.current.off('messageSynced');
+                socketRef.current.off('bulkMessageSync');
+                socketRef.current.off('DeviceLinked');
+                socketRef.current.off('syncError');
             }
         };
     }, []);
@@ -168,7 +206,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
     // Send message
     const sendMessage = useCallback(
-        (to: string, message: string, publickey: string, file?: any) => {
+        (to: string, message: string, publickey: string, file?: any, deviceId?: string) => {
             if (!socketRef.current) {
                 console.error('Socket not initialized');
                 return false;
@@ -185,6 +223,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
                         message,
                         publickey,
                         file: file || '',
+                        deviceId: deviceId || null,
                     });
                 });
                 return false;
@@ -196,6 +235,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
                 message,
                 publickey,
                 file: file || '',
+                deviceId: deviceId || null,
             });
             return true;
         },
@@ -238,7 +278,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     );
 
     const linkDevice = useCallback(
-        (socketId: string, token: string, serverkey: string, privatekey: string, Users?: any): boolean => {
+        (socketId: string, token: string, serverkey: string, privatekey: string, Users?: any, deviceId?: string): boolean => {
             if (!socketId || !token) {
                 console.error('SocketId or token missing for linkDevice');
                 return false;
@@ -252,11 +292,49 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
                 return false;
             }
 
-            socketRef.current.emit('LinkDevice', { socketId, token, serverkey, privatekey, Users });
+            socketRef.current.emit('LinkDevice', { socketId, token, serverkey, privatekey, Users, deviceId });
             return true;
         },
         []
     );
+
+    // Register device for chat sync
+    const registerDevice = useCallback((phoneNumber: string, deviceId: string) => {
+        if (!socketRef.current) {
+            console.error('Socket not initialized');
+            return;
+        }
+
+        if (!socketRef.current.connected) {
+            console.warn('Socket not connected, waiting...');
+            socketRef.current.once('connect', () => {
+                socketRef.current?.emit('registerDevice', { phoneNumber, deviceId });
+            });
+            return;
+        }
+
+        console.log(`📱 Registering device ${deviceId} for user ${phoneNumber}`);
+        socketRef.current.emit('registerDevice', { phoneNumber, deviceId });
+    }, []);
+
+    // Request message sync
+    const requestMessageSync = useCallback((phoneNumber: string, deviceId: string) => {
+        if (!socketRef.current) {
+            console.error('Socket not initialized');
+            return;
+        }
+
+        if (!socketRef.current.connected) {
+            console.warn('Socket not connected, waiting...');
+            socketRef.current.once('connect', () => {
+                socketRef.current?.emit('requestMessageSync', { phoneNumber, deviceId });
+            });
+            return;
+        }
+
+        console.log(`🔄 Requesting message sync for device ${deviceId}`);
+        socketRef.current.emit('requestMessageSync', { phoneNumber, deviceId });
+    }, []);
 
 
     // Register message callback
@@ -279,6 +357,36 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         statusCallbackRef.current = null;
     }, []);
 
+    // Register message synced callback
+    const onMessageSynced = useCallback((callback: (data: any) => void) => {
+        messageSyncedCallbackRef.current = callback;
+    }, []);
+
+    // Unregister message synced callback
+    const offMessageSynced = useCallback(() => {
+        messageSyncedCallbackRef.current = null;
+    }, []);
+
+    // Register bulk message sync callback
+    const onBulkMessageSync = useCallback((callback: (data: any) => void) => {
+        bulkMessageSyncCallbackRef.current = callback;
+    }, []);
+
+    // Unregister bulk message sync callback
+    const offBulkMessageSync = useCallback(() => {
+        bulkMessageSyncCallbackRef.current = null;
+    }, []);
+
+    // Register device linked callback
+    const onDeviceLinked = useCallback((callback: (data: any) => void) => {
+        deviceLinkedCallbackRef.current = callback;
+    }, []);
+
+    // Unregister device linked callback
+    const offDeviceLinked = useCallback(() => {
+        deviceLinkedCallbackRef.current = null;
+    }, []);
+
 
     const value: SocketContextType = {
         socket: socketRef.current,
@@ -295,6 +403,14 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         onStatusChanged,
         offStatusChanged,
         linkDevice,
+        registerDevice,
+        requestMessageSync,
+        onMessageSynced,
+        onBulkMessageSync,
+        onDeviceLinked,
+        offMessageSynced,
+        offBulkMessageSync,
+        offDeviceLinked,
     };
 
     return (

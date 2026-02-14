@@ -1,6 +1,6 @@
 import User from "../models/user.model.js";
 import Contact from "../models/contact.model.js";
-import { generateServerPublicKey, generateToken, sendOTP } from "../lib/utils.js";
+import { formetContactPhone,  generateToken, sendOTP } from "../lib/utils.js";
 
 // login user
 export const loginUser = async (req, res) => {
@@ -53,7 +53,7 @@ export const loginUser = async (req, res) => {
 
         return res.status(500).json({
             success: false,
-            message: "An error occurred while processing your request",f
+            message: "An error occurred while processing your request", f
         });
     }
 };
@@ -204,7 +204,7 @@ export const syncContacts = async (req, res) => {
             .filter(contact => contact.phoneNumber)
             .map(contact => ({
                 displayName: contact.displayName,
-                phoneNumber: contact.phoneNumber.replace(/[^\d+]/g, ''),
+                phoneNumber: formetContactPhone(contact.phoneNumber),
                 email: contact.email
             }));
 

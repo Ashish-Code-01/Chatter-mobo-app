@@ -13,12 +13,13 @@ import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import Contacts from 'react-native-contacts';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DeviceInfo from 'react-native-device-info';
 import { useSocket } from '../../context/socketcontext';
 
 const API_URL = "https://chatter-mobo-app.onrender.com";
 
 const Home = ({ navigation }: any) => {
-    const { registerUser, unregisterUser, onStatusChanged, offStatusChanged, contactStatusMap: contextStatusMap } = useSocket();
+    const { registerUser, unregisterUser, onStatusChanged, offStatusChanged, contactStatusMap: contextStatusMap, registerDevice, requestMessageSync, onDeviceLinked, offDeviceLinked, onBulkMessageSync, offBulkMessageSync } = useSocket();
 
     const [user, setUser] = useState<any>(null);
     const [unseenMessages, setUnseenMessages] = useState<any>({});
@@ -104,12 +105,22 @@ const Home = ({ navigation }: any) => {
                 const token = await AsyncStorage.getItem("token");
                 if (!token) return;
 
+                // Get or generate deviceId
+                let deviceId = await AsyncStorage.getItem("deviceId");
+                if (!deviceId) {
+                    const deviceModel = await DeviceInfo.getModel();
+                    deviceId = `${deviceModel}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                    await AsyncStorage.setItem("deviceId", deviceId);
+                }
+
                 const savedUser = await AsyncStorage.getItem("User");
 
                 if (savedUser) {
                     const parsed = JSON.parse(savedUser);
                     setUser(parsed);
                     registerUser(parsed.phoneNumber);
+                    // Register device for chat sync
+                    registerDevice(parsed.phoneNumber, deviceId);
                 } else {
                     const { data } = await axios.post(
                         `${API_URL}/auth/me`,
@@ -121,6 +132,8 @@ const Home = ({ navigation }: any) => {
                         setUser(data.user);
                         await AsyncStorage.setItem("User", JSON.stringify(data.user));
                         registerUser(data.user.phoneNumber);
+                        // Register device for chat sync
+                        registerDevice(data.user.phoneNumber, deviceId);
                     }
                 }
 
@@ -185,6 +198,103 @@ const Home = ({ navigation }: any) => {
             offStatusChanged();
         };
     }, [onStatusChanged, offStatusChanged]);
+
+    // Handle device linked event and sync messages
+    useEffect(() => {
+        const handleDeviceLinked = async (data: any) => {
+            try {
+                console.log('Device linked, starting message sync...');
+                const deviceId = await AsyncStorage.getItem("deviceId");
+                const userPhone = user?.phoneNumber;
+                
+                if (deviceId && userPhone) {
+                    // Register device
+                    registerDevice(userPhone, deviceId);
+                    
+                    // Request message sync
+                    setTimeout(() => {
+                        requestMessageSync(userPhone, deviceId);
+                    }, 1000); // Wait a bit for registration to complete
+                }
+            } catch (error) {
+                console.error('Error handling device linked:', error);
+            }
+        };
+
+        const handleBulkMessageSync = async (data: any) => {
+            try {
+                console.log(`Received bulk message sync batch ${data.batchIndex + 1}/${data.totalBatches}`);
+                
+                // Store messages in AsyncStorage by chatId
+                const messages = data.messages || [];
+                const secretkey = await AsyncStorage.getItem("secretkey");
+                const userPhone = user?.phoneNumber;
+                
+                if (!userPhone) return;
+
+                // Group messages by chat partner
+                const messagesByChat: Record<string, any[]> = {};
+                
+                messages.forEach((msg: any) => {
+                    const otherPhone = msg.sender === userPhone ? msg.receiver : msg.sender;
+                    const chatId = `chat_${[userPhone, otherPhone].sort().join("_")}`;
+                    
+                    if (!messagesByChat[chatId]) {
+                        messagesByChat[chatId] = [];
+                    }
+                    
+                    // Decrypt message if we have the key
+                    let decryptedContent = msg.content;
+                    if (secretkey && msg.content) {
+                        try {
+                            // Simple decryption (you may need to adjust based on your encryption method)
+                            decryptedContent = msg.content; // Decryption would happen here
+                        } catch (e) {
+                            console.error('Error decrypting synced message:', e);
+                        }
+                    }
+                    
+                    messagesByChat[chatId].push({
+                        from: msg.sender === userPhone ? "Me" : msg.sender,
+                        message: decryptedContent,
+                        timestamp: new Date(msg.createdAt || msg.timestamp).getTime(),
+                        file: msg.file || undefined,
+                    });
+                });
+
+                // Save messages to AsyncStorage
+                for (const [chatId, chatMessages] of Object.entries(messagesByChat)) {
+                    const existing = await AsyncStorage.getItem(chatId);
+                    const existingMessages = existing ? JSON.parse(existing) : [];
+                    const merged = [...existingMessages, ...chatMessages]
+                        .sort((a: any, b: any) => a.timestamp - b.timestamp);
+                    
+                    // Deduplicate
+                    const unique = merged.filter((msg: any, index: number, self: any[]) => 
+                        index === self.findIndex((m: any) => 
+                            m.timestamp === msg.timestamp && m.message === msg.message
+                        )
+                    );
+                    
+                    await AsyncStorage.setItem(chatId, JSON.stringify(unique));
+                }
+
+                if (data.isLastBatch) {
+                    console.log('✅ Message sync completed');
+                }
+            } catch (error) {
+                console.error('Error handling bulk message sync:', error);
+            }
+        };
+
+        onDeviceLinked(handleDeviceLinked);
+        onBulkMessageSync(handleBulkMessageSync);
+
+        return () => {
+            offDeviceLinked();
+            offBulkMessageSync();
+        };
+    }, [user, registerDevice, requestMessageSync, onDeviceLinked, offDeviceLinked, onBulkMessageSync, offBulkMessageSync]);
 
     return (
         <View style={styles.container}>

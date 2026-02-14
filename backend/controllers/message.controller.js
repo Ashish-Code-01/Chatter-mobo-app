@@ -121,3 +121,54 @@ export const seenmsg = async (req, res) => {
         });
     }
 };
+
+// Sync messages for a device
+export const syncMessagesForDevice = async (req, res) => {
+    try {
+        const userPhoneNumber = req.user?.phoneNumber;
+        const { deviceId } = req.body;
+
+        if (!userPhoneNumber) {
+            return res.status(401).json({
+                success: false,
+                error: "Unauthorized: user not found."
+            });
+        }
+
+        if (!deviceId) {
+            return res.status(400).json({
+                success: false,
+                error: "deviceId is required."
+            });
+        }
+
+        // Fetch all messages where user is sender or receiver
+        const messages = await Message.find({
+            $or: [
+                { sender: userPhoneNumber },
+                { receiver: userPhoneNumber }
+            ]
+        })
+            .sort({ createdAt: 1 })
+            .lean();
+
+        // Update syncedDevices for all messages
+        const messageIds = messages.map(m => m._id);
+        await Message.updateMany(
+            { _id: { $in: messageIds } },
+            { $addToSet: { syncedDevices: deviceId } }
+        );
+
+        return res.status(200).json({
+            success: true,
+            count: messages.length,
+            data: messages
+        });
+    } catch (error) {
+        console.error("Error syncing messages:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Internal server error."
+        });
+    }
+};

@@ -35,7 +35,7 @@ interface RouteParams {
 
 export default function ChatToContact({ route, navigation }: { route: { params: RouteParams }, navigation: any }) {
     const { myPhone, contactPhone, contactName } = route.params;
-    const { isConnected, onMessageReceived, offMessageReceived, onStatusChanged, offStatusChanged, sendMessage } = useSocket();
+    const { isConnected, onMessageReceived, offMessageReceived, onStatusChanged, offStatusChanged, sendMessage, onMessageSynced, offMessageSynced } = useSocket();
 
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
@@ -43,6 +43,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
     const [secretKey, setSecretKey] = useState<string>("");
     const [contactIsOnline, setContactIsOnline] = useState(false);
     const [contactAvatar, setContactAvatar] = useState<string>("");
+    const [deviceId, setDeviceId] = useState<string>("");
 
     const alphabet = useMemo(() => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!'_-&@#$%*()/:<>|+= ", []);
 
@@ -229,9 +230,90 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
         };
     }, [contactPhone, onStatusChanged, offStatusChanged]);
 
+    // Setup message sync listener
+    useEffect(() => {
+        if (!isConnected) return;
+
+        const handleMessageSynced = async ({ from, to, message: encryptedMsg, publickey, files, timestamp, messageId }: { 
+            from: string; 
+            to: string; 
+            message: string; 
+            publickey: string; 
+            files: any; 
+            timestamp: Date | string;
+            messageId?: string;
+        }) => {
+            try {
+                // Only process messages relevant to this chat
+                if ((from !== contactPhone && to !== contactPhone) || (from !== myPhone && to !== myPhone)) {
+                    return;
+                }
+
+                // Skip if this is a message we already have (check by messageId or content+timestamp)
+                const msgTimestamp = typeof timestamp === 'string' ? new Date(timestamp).getTime() : timestamp.getTime();
+                const existingMsg = messages.find(m => {
+                    if (messageId && m.timestamp === msgTimestamp) return true;
+                    const timeDiff = Math.abs(m.timestamp - msgTimestamp);
+                    return timeDiff < 1000; // Within 1 second
+                });
+                if (existingMsg) {
+                    return;
+                }
+
+                let keyToUse = secretKey;
+                if (!keyToUse) {
+                    const privatekey = await AsyncStorage.getItem("privatekey");
+                    if (publickey && privatekey) {
+                        keyToUse = publickey + privatekey;
+                    } else {
+                        const serverkey = await AsyncStorage.getItem("serverkey");
+                        if (privatekey && serverkey) {
+                            keyToUse = privatekey + serverkey;
+                        }
+                    }
+                }
+
+                if (!keyToUse) {
+                    console.error("No decryption key available for synced message");
+                    return;
+                }
+
+                const decryptedMsg = decryptMessage(encryptedMsg, keyToUse);
+
+                const newMsg: Message = {
+                    from: from === myPhone ? "Me" : from,
+                    message: decryptedMsg,
+                    timestamp: msgTimestamp,
+                    file: files || undefined,
+                };
+
+                setMessages((prev) => {
+                    const merged = dedupeMessages([...prev, newMsg]).sort(
+                        (a, b) => a.timestamp - b.timestamp
+                    );
+                    AsyncStorage.setItem(chatId, JSON.stringify(merged));
+                    return merged;
+                });
+            } catch (error) {
+                console.error("Error handling synced message:", error);
+            }
+        };
+
+        onMessageSynced(handleMessageSynced);
+
+        return () => {
+            offMessageSynced();
+        };
+    }, [isConnected, contactPhone, myPhone, secretKey, chatId, messages, dedupeMessages, onMessageSynced, offMessageSynced]);
+
     useEffect(() => {
         (async () => {
             try {
+                // Get deviceId
+                const storedDeviceId = await AsyncStorage.getItem("deviceId");
+                if (storedDeviceId) {
+                    setDeviceId(storedDeviceId);
+                }
 
                 const local = await AsyncStorage.getItem(chatId);
                 if (local) {
@@ -372,7 +454,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
 
             const publickey = keyToUse.substring(0, 16);
 
-            sendMessage(contactPhone, encryptedMsg, publickey);
+            sendMessage(contactPhone, encryptedMsg, publickey, undefined, deviceId);
 
         } catch (error) {
             console.error("Error sending message:", error);

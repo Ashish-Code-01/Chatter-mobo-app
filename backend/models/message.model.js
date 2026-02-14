@@ -24,6 +24,14 @@ const messageSchema = new mongoose.Schema({
     seen: {
         type: Boolean,
         default: false,
+    },
+    deviceId: {
+        type: String,
+        default: null,
+    },
+    syncedDevices: {
+        type: [String],
+        default: [],
     }
 }, { timestamps: true });
 

@@ -10,6 +10,7 @@ import {
 import { Camera, useCameraDevice, useCodeScanner } from 'react-native-vision-camera';
 import { useSocket } from '../../context/socketcontext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DeviceInfo from 'react-native-device-info';
 
 const QRScanner = ({ navigation }) => {
     const [hasPermission, setHasPermission] = useState(false);
@@ -24,11 +25,20 @@ const QRScanner = ({ navigation }) => {
         try {
             setIsLoading(true);
             const token = await AsyncStorage.getItem('token') || '';
-            const privatekey = await AsyncStorage.getItem("privatekey");
-            const serverkey = await AsyncStorage.getItem("serverkey");
+            const privatekey = await AsyncStorage.getItem("privatekey") || '';
+            const serverkey = await AsyncStorage.getItem("serverkey") || '';
             const Users = await AsyncStorage.getItem("Users");
+            
+            // Get or generate deviceId
+            let deviceId = await AsyncStorage.getItem("deviceId");
+            if (!deviceId) {
+                const deviceModel = await DeviceInfo.getModel();
+                deviceId = `${deviceModel}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                await AsyncStorage.setItem("deviceId", deviceId);
+            }
+            
             setScannedData(socketId);
-            const success = await linkDevice(socketId, token, privatekey, serverkey, Users);
+            const success = await linkDevice(socketId, token, privatekey, serverkey, Users, deviceId);
 
             if (!success) {
                 throw new Error('Failed to link device');

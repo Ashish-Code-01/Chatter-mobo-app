@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, MoreVertical, Send, Paperclip, Smile, Phone, Video, Menu, User, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
+import { socket, getOrCreateDeviceId, registerDevice } from '../utils/socket.js';
 
 const API_URL = "https://chatter-mobo-app.onrender.com";
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dqmxpgv5k/image/upload/v1765892967/A_circular_default_c_cafouy.png";
@@ -23,6 +24,7 @@ const ChatScreen = () => {
     const [contactStatusMap, setContactStatusMap] = useState({});
     const [searchQuery, setSearchQuery] = useState('');
     const [user, setUser] = useState(null);
+    const [deviceId, setDeviceId] = useState('');
 
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -38,9 +40,9 @@ const ChatScreen = () => {
     }, [navigate]);
 
     // Dedupe messages
-    const dedupeMessages = useCallback((list) => {
+    const dedupeMessages = useCallback((list: any) => {
         const map = new Map();
-        list.forEach((m) => {
+        list.forEach((m: any) => {
             const timeWindow = Math.floor(m.timestamp / 1000);
             const key = `${m.from}_${m.message}_${timeWindow}`;
             if (!map.has(key)) {
@@ -51,7 +53,7 @@ const ChatScreen = () => {
     }, []);
 
     // Encrypt Message
-    const encryptMessage = useCallback((text, key) => {
+    const encryptMessage = useCallback((text: string, key: string) => {
         if (!text || !key) {
             console.error("Text or key is missing for encryption");
             return text || "";
@@ -78,7 +80,7 @@ const ChatScreen = () => {
     }, [alphabet]);
 
     // Decrypt Message
-    const decryptMessage = useCallback((encryptedText, key) => {
+    const decryptMessage = useCallback((encryptedText: string, key: string) => {
         let decryptedText = "";
 
         for (let i = 0; i < encryptedText.length; i++) {
@@ -129,7 +131,7 @@ const ChatScreen = () => {
     }, []);
 
     // Fetch contact status
-    const fetchContactStatus = useCallback(async (phone) => {
+    const fetchContactStatus = useCallback(async (phone: string) => {
         try {
             const response = await axios.get(`${API_URL}/api/online/status/${phone}`);
             if (response.data?.success) {
@@ -251,7 +253,7 @@ const ChatScreen = () => {
 
             const res = response.data;
             const raw = res.data || [];
-            const secretkey = localStorage.getItem("secretkey");
+            const secretkey = localStorage.getItem("secretkey") || '';
 
             const backendMsgs = raw.map((msg) => {
                 try {
@@ -308,7 +310,17 @@ const ChatScreen = () => {
     useEffect(() => {
         const loadData = async () => {
             try {
+                // Get or create deviceId
+                const storedDeviceId = getOrCreateDeviceId();
+                setDeviceId(storedDeviceId);
+
                 await fetchCurrentUser();
+
+                // Register device if user is available
+                if (user?.phoneNumber && storedDeviceId) {
+                    registerDevice(user.phoneNumber, storedDeviceId);
+                }
+
                 await fetchAllContacts();
 
                 if (contactPhone) {
@@ -330,7 +342,70 @@ const ChatScreen = () => {
         };
 
         loadData();
-    }, [contactPhone, chatId, fetchCurrentUser, fetchAllContacts, fetchContactStatus, fetchContactAvatar, fetchMessagesFromBackend, markMessagesSeen]);
+    }, [contactPhone, chatId]);
+
+    // Listen for synced messages
+    useEffect(() => {
+        const handleMessageSynced = ({ from, to, message: encryptedMsg, publickey, files, timestamp, messageId }: { from: string; to: string; message: string, publickey: string, files: string, timestamp: string; messageId: string }) => {
+            // Only process messages relevant to current chat
+            if ((from !== contactPhone && to !== contactPhone) || (from !== user?.phoneNumber && to !== user?.phoneNumber)) {
+                return;
+            }
+
+            // Skip if message already exists
+            const msgTimestamp = typeof timestamp === 'string' ? new Date(timestamp).getTime() : timestamp.getTime();
+            const existingMsg = messages.find(m => {
+                if (messageId && Math.abs(m.timestamp - msgTimestamp) < 1000) return true;
+                const timeDiff = Math.abs(m.timestamp - msgTimestamp);
+                return timeDiff < 1000;
+            });
+            if (existingMsg) {
+                return;
+            }
+
+            // Decrypt message
+            let keyToUse = secretKey;
+            if (!keyToUse) {
+                const privatekey = localStorage.getItem("privatekey");
+                if (publickey && privatekey) {
+                    keyToUse = publickey + privatekey;
+                } else {
+                    const serverkey = localStorage.getItem("serverkey");
+                    if (privatekey && serverkey) {
+                        keyToUse = privatekey + serverkey;
+                    }
+                }
+            }
+
+            if (!keyToUse) {
+                console.error("No decryption key available for synced message");
+                return;
+            }
+
+            const decryptedMsg = decryptMessage(encryptedMsg, keyToUse);
+
+            const newMsg = {
+                from: from === user?.phoneNumber ? "Me" : from,
+                message: decryptedMsg,
+                timestamp: msgTimestamp,
+                file: files || undefined,
+            };
+
+            setMessages((prev) => {
+                const merged = dedupeMessages([...prev, newMsg]).sort(
+                    (a, b) => a.timestamp - b.timestamp
+                );
+                localStorage.setItem(chatId, JSON.stringify(merged));
+                return merged;
+            });
+        };
+
+        socket.on('messageSynced', handleMessageSynced);
+
+        return () => {
+            socket.off('messageSynced', handleMessageSynced);
+        };
+    }, [contactPhone, user, secretKey, chatId, messages, decryptMessage, dedupeMessages]);
 
     // Auto-scroll to bottom
     useEffect(() => {
@@ -421,13 +496,10 @@ const ChatScreen = () => {
             alert(`${oversizedFiles.length} file(s) exceed 10MB limit`);
             return;
         }
-
-        // Handle file upload
-        console.log('Files selected:', files);
     };
 
     // Handle chat selection
-    const handleChatSelect = async (chat) => {
+    const handleChatSelect = async (chat: any) => {
         setSelectedChat(chat);
         setLoading(true);
 
@@ -465,7 +537,7 @@ const ChatScreen = () => {
             );
 
             const raw = msgResponse.data.data || [];
-            const secretkey = localStorage.getItem("secretkey");
+            const secretkey = localStorage.getItem("secretkey") || '';
 
             const backendMsgs = raw.map((msg) => {
                 try {
@@ -505,7 +577,7 @@ const ChatScreen = () => {
         }
     };
 
-    const formatTime = (timestamp) => {
+    const formatTime = (timestamp: any) => {
         return new Date(timestamp).toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit',
@@ -541,7 +613,7 @@ const ChatScreen = () => {
                     </button>
                 </div>
             </div>
-            <div className='h-[2px] bg-[#00D4C2]' />
+            <div className='h-0.5 bg-[#00D4C2]' />
 
             <div className='flex flex-1 overflow-hidden'>
                 {/* Sidebar - Chat List */}
@@ -580,7 +652,7 @@ const ChatScreen = () => {
                                     >
                                         <div className='flex items-center gap-3'>
                                             {/* Avatar */}
-                                            <div className='w-12 h-12 rounded-full bg-[#00D4C2] flex items-center justify-center text-[#0F1419] font-bold flex-shrink-0'>
+                                            <div className='w-12 h-12 rounded-full bg-[#00D4C2] flex items-center justify-center text-[#0F1419] font-bold shrink-0'>
                                                 {chat.avatar}
                                             </div>
 
@@ -598,7 +670,7 @@ const ChatScreen = () => {
                                                         </span>
                                                     </div>
                                                     {unreadCount > 0 && (
-                                                        <span className='bg-[#00D4C2] text-[#0F1419] text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5'>
+                                                        <span className='bg-[#00D4C2] text-[#0F1419] text-xs font-bold rounded-full min-w-5 h-5 flex items-center justify-center px-1.5'>
                                                             {unreadCount}
                                                         </span>
                                                     )}
@@ -612,7 +684,7 @@ const ChatScreen = () => {
                     </div>
                 </div>
 
-                <div className='w-[2px] bg-[#00D4C2]' />
+                <div className='w-0.5 bg-[#00D4C2]' />
 
                 {/* Main Chat Area */}
                 <div className='bg-[#0F1419] w-[70%] flex flex-col'>
@@ -674,8 +746,8 @@ const ChatScreen = () => {
                                                     >
                                                         <div
                                                             className={`max-w-[70%] rounded-2xl px-4 py-3 ${isMe
-                                                                    ? 'bg-[#00D4C2] text-[#0F1419]'
-                                                                    : 'bg-[#1a1f2e] text-white border border-[#00D4C2]/20'
+                                                                ? 'bg-[#00D4C2] text-[#0F1419]'
+                                                                : 'bg-[#1a1f2e] text-white border border-[#00D4C2]/20'
                                                                 }`}
                                                         >
                                                             <p className='text-sm leading-relaxed'>{msg.message}</p>
@@ -724,8 +796,8 @@ const ChatScreen = () => {
                                         onClick={handleSendMessage}
                                         disabled={!message.trim()}
                                         className={`p-3 rounded-lg transition-colors ${message.trim()
-                                                ? 'bg-[#00D4C2] text-[#0F1419] hover:bg-[#00D4C2]/90'
-                                                : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                                            ? 'bg-[#00D4C2] text-[#0F1419] hover:bg-[#00D4C2]/90'
+                                            : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                                             }`}
                                     >
                                         <Send size={20} />
