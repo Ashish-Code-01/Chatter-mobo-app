@@ -35,11 +35,15 @@ export const requestMessageSync = (phoneNumber, deviceId) => {
     });
 };
 
-// Generate or retrieve deviceId
+// Generate or retrieve deviceId with improved uniqueness
 export const getOrCreateDeviceId = () => {
     let deviceId = localStorage.getItem("deviceId");
     if (!deviceId) {
-        deviceId = `web-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        // Generate more unique ID using multiple entropy sources
+        const timestamp = Date.now().toString(36);
+        const randomComponent = Math.random().toString(36).substr(2, 12);
+        const userAgent = navigator.userAgent.substring(0, 8).replace(/[^a-z0-9]/gi, '');
+        deviceId = `web-${userAgent}-${timestamp}-${randomComponent}`;
         localStorage.setItem("deviceId", deviceId);
     }
     return deviceId;

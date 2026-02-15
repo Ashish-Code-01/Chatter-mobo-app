@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, MoreVertical, Send, Paperclip, Smile, Phone, Video, Menu, User, ArrowLeft } from 'lucide-react';
 import axios from 'axios';
-import { socket, getOrCreateDeviceId, registerDevice } from '../utils/socket.js';
+import { socket, getOrCreateDeviceId, registerDevice, requestMessageSync } from '../utils/socket.js';
 
 const API_URL = "https://chatter-mobo-app.onrender.com";
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dqmxpgv5k/image/upload/v1765892967/A_circular_default_c_cafouy.png";
@@ -122,7 +122,7 @@ const ChatScreen = () => {
 
                 if (data?.user) {
                     setUser(data.user);
-                    localStorage.setItem("User", JSON.stringify(data.user));
+                    localStorage.setItem("User", data.user);
                 }
             }
         } catch (error) {
@@ -174,7 +174,7 @@ const ChatScreen = () => {
             // Get contacts from localStorage
             const savedContacts = localStorage.getItem("Users");
             let contacts = [];
-            
+
             if (savedContacts) {
                 try {
                     const parsed = JSON.parse(savedContacts);
@@ -321,20 +321,28 @@ const ChatScreen = () => {
     useEffect(() => {
         if (!user?.phoneNumber || !deviceId) return;
 
-        // Register user on socket
-        if (socket.connected) {
+        const registerUserAndDevice = () => {
             console.log('📱 Registering user on socket:', user.phoneNumber);
             socket.emit('register', user.phoneNumber);
+
+            // Register device
+            registerDevice(user.phoneNumber, deviceId);
+
+            // Request message sync for this device
+            setTimeout(() => {
+                console.log('🔄 Requesting message sync for device:', deviceId);
+                requestMessageSync(user.phoneNumber, deviceId);
+            }, 500); // Small delay to ensure device is registered first
+        };
+
+        if (socket.connected) {
+            registerUserAndDevice();
         } else {
             console.log('⏳ Waiting for socket to connect before registering user...');
             socket.once('connect', () => {
-                console.log('📱 Registering user on socket:', user.phoneNumber);
-                socket.emit('register', user.phoneNumber);
+                registerUserAndDevice();
             });
         }
-
-        // Register device
-        registerDevice(user.phoneNumber, deviceId);
     }, [user, deviceId]);
 
     // Load initial data
@@ -463,6 +471,68 @@ const ChatScreen = () => {
             socket.off('messageSynced', handleMessageSynced);
         };
     }, [processAndAddMessage]);
+
+    // Listen for bulk message sync (when device first connects)
+    useEffect(() => {
+        const handleBulkMessageSync = ({ messages: syncedMessages, batchIndex, totalBatches, isLastBatch }: { messages: any[], batchIndex: number, totalBatches: number, isLastBatch: boolean }) => {
+            console.log(`📦 Received message sync batch ${batchIndex + 1}/${totalBatches}: ${syncedMessages.length} messages`);
+
+            const secretkey = localStorage.getItem("secretkey") || '';
+
+            syncedMessages.forEach((msg) => {
+                try {
+                    // Only process messages relevant to current chat or all messages if no chat selected
+                    if (contactPhone && !((msg.sender === contactPhone && msg.receiver === user?.phoneNumber) || (msg.receiver === contactPhone && msg.sender === user?.phoneNumber))) {
+                        return;
+                    }
+
+                    const decryptedContent = decryptMessage(msg.content, secretkey);
+
+                    setMessages((prev) => {
+                        // Deduplicate by checking timestamp and content
+                        const exists = prev.some(m => {
+                            const timeDiff = Math.abs(m.timestamp - new Date(msg.createdAt).getTime());
+                            return timeDiff < 1000 && m.message === decryptedContent;
+                        });
+
+                        if (exists) {
+                            return prev;
+                        }
+
+                        const newMsg = {
+                            from: msg.sender === user?.phoneNumber ? "Me" : msg.sender,
+                            message: decryptedContent,
+                            timestamp: new Date(msg.createdAt).getTime(),
+                            file: msg.file || undefined,
+                        };
+
+                        const merged = dedupeMessages([...prev, newMsg]).sort(
+                            (a, b) => a.timestamp - b.timestamp
+                        );
+
+                        if (contactPhone) {
+                            const chatIdForContact = `chat_${[user?.phoneNumber, contactPhone].sort().join("_")}`;
+                            localStorage.setItem(chatIdForContact, JSON.stringify(merged));
+                        }
+
+                        return merged;
+                    });
+                } catch (error) {
+                    console.error("Error processing synced message:", error);
+                }
+            });
+
+            if (isLastBatch) {
+                console.log('✅ Bulk message sync completed');
+            }
+        };
+
+        socket.on('bulkMessageSync', handleBulkMessageSync);
+
+        return () => {
+            socket.off('bulkMessageSync', handleBulkMessageSync);
+        };
+    }, [user, contactPhone, decryptMessage, dedupeMessages]);
 
     // Auto-scroll to bottom
     useEffect(() => {

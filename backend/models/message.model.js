@@ -35,5 +35,10 @@ const messageSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
+// Create database indexes for frequently queried fields
+messageSchema.index({ sender: 1, receiver: 1 });
+messageSchema.index({ receiver: 1, seen: 1 });
+messageSchema.index({ createdAt: -1 });
+
 const Message = mongoose.model("Message", messageSchema);
 export default Message;  

@@ -57,5 +57,10 @@ const userSchema = new mongoose.Schema({
     }]
 }, { timestamps: true });
 
+// Create database indexes for frequently queried fields
+userSchema.index({ phoneNumber: 1 });
+userSchema.index({ isOnline: 1 });
+userSchema.index({ createdAt: -1 });
+
 const User = mongoose.model("User", userSchema);
 export default User;  

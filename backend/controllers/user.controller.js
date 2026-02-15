@@ -69,6 +69,14 @@ export const verifyUser = async (req, res) => {
         });
     }
 
+    // Validate OTP format (6 digits)
+    if (!/^\d{6}$/.test(otp.toString())) {
+        return res.status(400).json({
+            success: false,
+            message: "Invalid OTP format"
+        });
+    }
+
     try {
         const user = await User.findOne({ phoneNumber });
 
@@ -76,6 +84,14 @@ export const verifyUser = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: "User not found"
+            });
+        }
+
+        // Check OTP expiry
+        if (!user.otpExpiry || new Date() > user.otpExpiry) {
+            return res.status(400).json({
+                success: false,
+                message: "OTP has expired. Please request a new one."
             });
         }
 
@@ -88,6 +104,7 @@ export const verifyUser = async (req, res) => {
 
         user.isverified = true;
         user.otp = null;
+        user.otpExpiry = null;
         await user.save();
 
         const token = generateToken(user._id);
