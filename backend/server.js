@@ -31,7 +31,7 @@ const PORT = process.env.PORT || 5000;
 // set up socket.io with CORS restrictions
 export const io = new Server(server, {
     cors: {
-        origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ['https://chatter-mobo-app.onrender.com'],
+        origin:"*",
         credentials: true,
         methods: ['GET', 'POST']
     },
