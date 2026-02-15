@@ -1,6 +1,6 @@
 import User from "../models/user.model.js";
 import Contact from "../models/contact.model.js";
-import { formetContactPhone,  generateToken, sendOTP } from "../lib/utils.js";
+import { formetContactPhone, generateToken, sendOTP } from "../lib/utils.js";
 
 // login user
 export const loginUser = async (req, res) => {
@@ -35,11 +35,12 @@ export const loginUser = async (req, res) => {
                 upsert: true,
                 new: true,
                 setDefaultsOnInsert: true,
-                runValidators: false
+                runValidators: true
             }
         );
 
-        sendOTP(phone, otp)
+        // Send OTP (await if it's async)
+        await sendOTP(phone, otp);
 
         return res.status(200).json({
             success: true,
@@ -53,11 +54,10 @@ export const loginUser = async (req, res) => {
 
         return res.status(500).json({
             success: false,
-            message: "An error occurred while processing your request", f
+            message: "An error occurred while processing your request"
         });
     }
 };
-
 // verify user
 export const verifyUser = async (req, res) => {
     const { phoneNumber, otp } = req.body;

@@ -76,7 +76,7 @@ function App() {
             // Store messages in localStorage by chatId
             const messages = data.messages || [];
             const secretkey = localStorage.getItem("secretkey");
-            const userPhone = localStorage.getItem("User") ? JSON.parse(localStorage.getItem("User")).phoneNumber : null;
+            const userPhone = localStorage.getItem("User") ? JSON.parse(localStorage.getItem("User") || "").phoneNumber : null;
 
             if (!userPhone) return;
 
