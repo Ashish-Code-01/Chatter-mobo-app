@@ -29,12 +29,12 @@ export async function sendOTP(phoneNumber, otp) {
 }
 
 export function formatContactPhone(phone) {
-    
+
     const digits = phone.replace(/\D/g, '');
 
     // Extract the last 10 digits (Indian mobile number)
     const last10Digits = digits.slice(-10);
 
     // Return formatted number if we have exactly 10 digits, otherwise return original
-    return last10Digits.length === 10 ? `+91${last10Digits}` : phone;
+    return last10Digits.length === 10 ? `+91${last10Digits}` : `+91${digits}`;
 }
