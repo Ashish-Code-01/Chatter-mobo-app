@@ -173,7 +173,18 @@ const ChatScreen = () => {
 
             // Get contacts from localStorage
             const savedContacts = localStorage.getItem("Users");
-            let contacts = savedContacts ? JSON.parse(savedContacts) : [];
+            let contacts = [];
+            
+            if (savedContacts) {
+                try {
+                    const parsed = JSON.parse(savedContacts);
+                    // Ensure it's an array
+                    contacts = Array.isArray(parsed) ? parsed : (parsed?.data ? parsed.data : []);
+                } catch (parseError) {
+                    console.error("Error parsing saved contacts:", parseError);
+                    contacts = [];
+                }
+            }
 
             // Fetch unseen messages
             const { data: msgData } = await axios.post(
@@ -306,6 +317,26 @@ const ChatScreen = () => {
         }
     }, [contactPhone]);
 
+    // Register user on socket when they become available
+    useEffect(() => {
+        if (!user?.phoneNumber || !deviceId) return;
+
+        // Register user on socket
+        if (socket.connected) {
+            console.log('📱 Registering user on socket:', user.phoneNumber);
+            socket.emit('register', user.phoneNumber);
+        } else {
+            console.log('⏳ Waiting for socket to connect before registering user...');
+            socket.once('connect', () => {
+                console.log('📱 Registering user on socket:', user.phoneNumber);
+                socket.emit('register', user.phoneNumber);
+            });
+        }
+
+        // Register device
+        registerDevice(user.phoneNumber, deviceId);
+    }, [user, deviceId]);
+
     // Load initial data
     useEffect(() => {
         const loadData = async () => {
@@ -315,12 +346,6 @@ const ChatScreen = () => {
                 setDeviceId(storedDeviceId);
 
                 await fetchCurrentUser();
-
-                // Register device if user is available
-                if (user?.phoneNumber && storedDeviceId) {
-                    registerDevice(user.phoneNumber, storedDeviceId);
-                }
-
                 await fetchAllContacts();
 
                 if (contactPhone) {
@@ -344,45 +369,45 @@ const ChatScreen = () => {
         loadData();
     }, [contactPhone, chatId]);
 
-    // Listen for synced messages
-    useEffect(() => {
-        const handleMessageSynced = ({ from, to, message: encryptedMsg, publickey, files, timestamp, messageId }: { from: string; to: string; message: string, publickey: string, files: string, timestamp: string; messageId: string }) => {
-            // Only process messages relevant to current chat
-            if ((from !== contactPhone && to !== contactPhone) || (from !== user?.phoneNumber && to !== user?.phoneNumber)) {
-                return;
-            }
+    // Helper function to process and add messages
+    const processAndAddMessage = useCallback((from: string, to: string, encryptedMsg: string, publickey: string, files: string | undefined, timestamp: string | number | undefined) => {
+        // Only process messages relevant to current chat
+        const isRelevant = (from === contactPhone && to === user?.phoneNumber) ||
+            (to === contactPhone && from === user?.phoneNumber);
 
-            // Skip if message already exists
-            const msgTimestamp = typeof timestamp === 'string' ? new Date(timestamp).getTime() : timestamp.getTime();
-            const existingMsg = messages.find(m => {
-                if (messageId && Math.abs(m.timestamp - msgTimestamp) < 1000) return true;
-                const timeDiff = Math.abs(m.timestamp - msgTimestamp);
-                return timeDiff < 1000;
-            });
-            if (existingMsg) {
-                return;
-            }
+        if (!isRelevant || !contactPhone || !user?.phoneNumber) {
+            return;
+        }
 
-            // Decrypt message
-            let keyToUse = secretKey;
-            if (!keyToUse) {
-                const privatekey = localStorage.getItem("privatekey");
-                if (publickey && privatekey) {
-                    keyToUse = publickey + privatekey;
-                } else {
-                    const serverkey = localStorage.getItem("serverkey");
-                    if (privatekey && serverkey) {
-                        keyToUse = privatekey + serverkey;
-                    }
+        // Decrypt message
+        let keyToUse = secretKey;
+        if (!keyToUse) {
+            const privatekey = localStorage.getItem("privatekey");
+            if (publickey && privatekey) {
+                keyToUse = publickey + privatekey;
+            } else {
+                const serverkey = localStorage.getItem("serverkey");
+                if (privatekey && serverkey) {
+                    keyToUse = privatekey + serverkey;
                 }
             }
+        }
 
-            if (!keyToUse) {
-                console.error("No decryption key available for synced message");
-                return;
-            }
+        if (!keyToUse) {
+            console.error("No decryption key available for message");
+            return;
+        }
 
+        try {
             const decryptedMsg = decryptMessage(encryptedMsg, keyToUse);
+
+            // Determine timestamp
+            let msgTimestamp = timestamp;
+            if (typeof msgTimestamp === 'string') {
+                msgTimestamp = new Date(msgTimestamp).getTime();
+            } else if (!msgTimestamp) {
+                msgTimestamp = Date.now();
+            }
 
             const newMsg = {
                 from: from === user?.phoneNumber ? "Me" : from,
@@ -392,12 +417,44 @@ const ChatScreen = () => {
             };
 
             setMessages((prev) => {
+                // Check if message already exists
+                const exists = prev.some(m => {
+                    const timeDiff = Math.abs(m.timestamp - msgTimestamp);
+                    return timeDiff < 1000 && m.from === newMsg.from && m.message === newMsg.message;
+                });
+
+                if (exists) {
+                    return prev;
+                }
+
                 const merged = dedupeMessages([...prev, newMsg]).sort(
                     (a, b) => a.timestamp - b.timestamp
                 );
                 localStorage.setItem(chatId, JSON.stringify(merged));
                 return merged;
             });
+        } catch (error) {
+            console.error("Error processing message:", error);
+        }
+    }, [contactPhone, user, secretKey, chatId, decryptMessage, dedupeMessages]);
+
+    // Listen for incoming messages from online users
+    useEffect(() => {
+        const handleMessageReceived = ({ from, message: encryptedMsg, publickey, files }: { from: string; message: string; publickey: string; files: string }) => {
+            processAndAddMessage(from, user?.phoneNumber || '', encryptedMsg, publickey, files, Date.now());
+        };
+
+        socket.on('Receivemessage', handleMessageReceived);
+
+        return () => {
+            socket.off('Receivemessage', handleMessageReceived);
+        };
+    }, [user, processAndAddMessage]);
+
+    // Listen for synced messages
+    useEffect(() => {
+        const handleMessageSynced = ({ from, to, message: encryptedMsg, publickey, files, timestamp, messageId }: { from: string; to: string; message: string, publickey: string, files: string, timestamp: string; messageId: string }) => {
+            processAndAddMessage(from, to, encryptedMsg, publickey, files, timestamp);
         };
 
         socket.on('messageSynced', handleMessageSynced);
@@ -405,7 +462,7 @@ const ChatScreen = () => {
         return () => {
             socket.off('messageSynced', handleMessageSynced);
         };
-    }, [contactPhone, user, secretKey, chatId, messages, decryptMessage, dedupeMessages]);
+    }, [processAndAddMessage]);
 
     // Auto-scroll to bottom
     useEffect(() => {
@@ -457,28 +514,37 @@ const ChatScreen = () => {
 
             const publickey = keyToUse.substring(0, 16);
 
-            // Send message via API
-            const token = localStorage.getItem("token");
-            await axios.post(
-                `${API_URL}/api/messages/send`,
-                {
-                    receiver: contactPhone,
-                    content: encryptedMsg,
-                    publicKey: publickey
-                },
-                {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'token': token
-                    }
-                }
-            );
+            // Send message via socket
+            if (socket.connected) {
+                console.log('📤 Sending message via socket to:', contactPhone);
+                socket.emit('sendMessage', {
+                    from: user?.phoneNumber,
+                    to: contactPhone,
+                    message: encryptedMsg,
+                    publickey: publickey,
+                    files: null,
+                    deviceId: deviceId
+                });
+            } else {
+                console.warn('⚠️ Socket not connected, waiting for connection...');
+                socket.once('connect', () => {
+                    console.log('📤 Socket reconnected, sending message to:', contactPhone);
+                    socket.emit('sendMessage', {
+                        from: user?.phoneNumber,
+                        to: contactPhone,
+                        message: encryptedMsg,
+                        publickey: publickey,
+                        files: null,
+                        deviceId: deviceId
+                    });
+                });
+            }
 
         } catch (error) {
             console.error("Error sending message:", error);
             alert("Failed to send message");
         }
-    }, [message, secretKey, chatId, contactPhone, encryptMessage]);
+    }, [message, secretKey, chatId, contactPhone, user, deviceId, encryptMessage]);
 
     // Handle file attachment
     const handleAttachDocument = () => {

@@ -99,7 +99,8 @@ io.on("connection", (socket) => {
                 file: files || null,
                 Publickey: publickey || "",  // Store public key for decryption
                 deviceId: deviceId || null,
-                timestamp: new Date()
+                timestamp: new Date(),
+                createdAt: new Date()
             });
         } catch (err) {
             console.error("Error saving message to database:", err);
@@ -109,9 +110,12 @@ io.on("connection", (socket) => {
             // Receiver is online - send encrypted message directly
             io.to(receiverSocketId).emit("Receivemessage", {
                 from,
+                to,
                 message,
                 files: files || null,
-                publickey: publickey || ""
+                publickey: publickey || "",
+                timestamp: savedMessage?.createdAt || new Date(),
+                messageId: savedMessage?._id
             });
             console.log(`Message delivered to online receiver: ${to}`);
         }
