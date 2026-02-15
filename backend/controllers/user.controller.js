@@ -1,6 +1,6 @@
 import User from "../models/user.model.js";
 import Contact from "../models/contact.model.js";
-import { formetContactPhone, generateToken, sendOTP } from "../lib/utils.js";
+import { formatContactPhone, generateToken, sendOTP } from "../lib/utils.js";
 
 // login user
 export const loginUser = async (req, res) => {
@@ -221,7 +221,7 @@ export const syncContacts = async (req, res) => {
             .filter(contact => contact.phoneNumber)
             .map(contact => ({
                 displayName: contact.displayName,
-                phoneNumber: formetContactPhone(contact.phoneNumber),
+                phoneNumber: formatContactPhone(contact.phoneNumber),
                 email: contact.email
             }));
 

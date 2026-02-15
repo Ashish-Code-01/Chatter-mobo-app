@@ -20,6 +20,14 @@ import { useSocket } from "../../context/socketcontext";
 const API_URL = "https://chatter-mobo-app.onrender.com";
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dqmxpgv5k/image/upload/v1765892967/A_circular_default_c_cafouy.png";
 
+// Interface for bulk sync messages
+interface BulkSyncData {
+    messages: any[];
+    batchNumber: number;
+    totalBatches: number;
+    isLastBatch?: boolean;
+}
+
 interface Message {
     from: string;
     message: string;
@@ -35,7 +43,7 @@ interface RouteParams {
 
 export default function ChatToContact({ route, navigation }: { route: { params: RouteParams }, navigation: any }) {
     const { myPhone, contactPhone, contactName } = route.params;
-    const { isConnected, onMessageReceived, offMessageReceived, onStatusChanged, offStatusChanged, sendMessage, onMessageSynced, offMessageSynced } = useSocket();
+    const { isConnected, onMessageReceived, offMessageReceived, onStatusChanged, offStatusChanged, sendMessage, onMessageSynced, offMessageSynced, requestMessageSync, onBulkMessageSync, offBulkMessageSync } = useSocket();
 
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
@@ -44,6 +52,9 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
     const [contactIsOnline, setContactIsOnline] = useState(false);
     const [contactAvatar, setContactAvatar] = useState<string>("");
     const [deviceId, setDeviceId] = useState<string>("");
+    const [isTyping, setIsTyping] = useState(false);
+    const [contactTyping, setContactTyping] = useState(false);
+    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const alphabet = useMemo(() => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!'_-&@#$%*()/:<>|+= ", []);
 
@@ -234,12 +245,12 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
     useEffect(() => {
         if (!isConnected) return;
 
-        const handleMessageSynced = async ({ from, to, message: encryptedMsg, publickey, files, timestamp, messageId }: { 
-            from: string; 
-            to: string; 
-            message: string; 
-            publickey: string; 
-            files: any; 
+        const handleMessageSynced = async ({ from, to, message: encryptedMsg, publickey, files, timestamp, messageId }: {
+            from: string;
+            to: string;
+            message: string;
+            publickey: string;
+            files: any;
             timestamp: Date | string;
             messageId?: string;
         }) => {
@@ -306,6 +317,87 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
         };
     }, [isConnected, contactPhone, myPhone, secretKey, chatId, messages, dedupeMessages, onMessageSynced, offMessageSynced]);
 
+    // Setup bulk message sync listener (for initial sync after device links)
+    useEffect(() => {
+        if (!isConnected) return;
+
+        const handleBulkMessageSync = async (data: BulkSyncData) => {
+            try {
+                console.log(`📦 Processing bulk sync batch ${data.batchNumber}/${data.totalBatches}`);
+
+                for (const msg of data.messages) {
+                    // Skip messages not relevant to this chat
+                    if ((msg.sender !== contactPhone && msg.receiver !== contactPhone) ||
+                        (msg.sender !== myPhone && msg.receiver !== myPhone)) {
+                        continue;
+                    }
+
+                    // Skip if message already exists
+                    const msgTimestamp = msg.timestamp ? new Date(msg.timestamp).getTime() : msg.createdAt?.getTime() || Date.now();
+                    const existingMsg = messages.find(m => Math.abs(m.timestamp - msgTimestamp) < 1000);
+                    if (existingMsg) continue;
+
+                    let keyToUse = secretKey;
+                    if (!keyToUse && msg.publickey) {
+                        const privatekey = await AsyncStorage.getItem("privatekey");
+                        if (privatekey) {
+                            keyToUse = msg.publickey + privatekey;
+                        } else {
+                            const serverkey = await AsyncStorage.getItem("serverkey");
+                            if (serverkey) {
+                                keyToUse = msg.publickey + serverkey;
+                            }
+                        }
+                    }
+
+                    if (!keyToUse) continue;
+
+                    const decryptedContent = decryptMessage(msg.content || msg.message, keyToUse);
+
+                    const newMsg: Message = {
+                        from: msg.sender === myPhone ? "Me" : msg.sender,
+                        message: decryptedContent,
+                        timestamp: msgTimestamp,
+                        file: msg.file || msg.files || undefined,
+                    };
+
+                    setMessages((prev) => {
+                        const merged = dedupeMessages([...prev, newMsg]).sort(
+                            (a, b) => a.timestamp - b.timestamp
+                        );
+                        AsyncStorage.setItem(chatId, JSON.stringify(merged));
+                        return merged;
+                    });
+                }
+
+                console.log(`✅ Bulk sync batch ${data.batchNumber} processed`);
+            } catch (error) {
+                console.error("Error processing bulk message sync:", error);
+            }
+        };
+
+        onBulkMessageSync(handleBulkMessageSync);
+
+        return () => {
+            offBulkMessageSync();
+        };
+    }, [isConnected, contactPhone, myPhone, secretKey, chatId, messages, dedupeMessages, onBulkMessageSync, offBulkMessageSync]);
+
+    // Setup typing indicator handler
+    useEffect(() => {
+        const handleTypingIndicator = ({ from, isTyping: typing }: { from: string; isTyping: boolean }) => {
+            if (from === contactPhone) {
+                setContactTyping(typing);
+            }
+        };
+
+        onStatusChanged(handleTypingIndicator);
+
+        return () => {
+            offStatusChanged();
+        };
+    }, [contactPhone, onStatusChanged, offStatusChanged]);
+
     useEffect(() => {
         (async () => {
             try {
@@ -313,6 +405,12 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                 const storedDeviceId = await AsyncStorage.getItem("deviceId");
                 if (storedDeviceId) {
                     setDeviceId(storedDeviceId);
+
+                    // Request message sync for this device if socket is connected
+                    if (isConnected && myPhone) {
+                        console.log(`🔄 Requesting message sync for device ${storedDeviceId}`);
+                        requestMessageSync(myPhone, storedDeviceId);
+                    }
                 }
 
                 const local = await AsyncStorage.getItem(chatId);
@@ -332,7 +430,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                 setLoading(false);
             }
         })();
-    }, []);
+    }, [isConnected, myPhone, isConnected ? myPhone : null]);
 
     const fetchContactStatus = async () => {
         try {
@@ -410,238 +508,265 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
         }
     };
 
-    const handleSend = useCallback(async () => {
-        try {
-            if (!message.trim()) return;
+};
 
-            let keyToUse = secretKey;
+const handleTextChange = useCallback((text: string) => {
+    setMessage(text);
 
-            if (!keyToUse) {
-                const privatekey = await AsyncStorage.getItem("privatekey");
-                const serverkey = await AsyncStorage.getItem("serverkey");
+    // Clear previous typing timeout
+    if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+    }
 
-                if (!privatekey || !serverkey) {
-                    console.error("Encryption keys not found. Please login again.");
-                    Alert.alert("Error", "Encryption keys not found. Please login again.");
-                    return;
-                }
+    // Emit typing started if not already typing
+    if (!isTyping && text.length > 0) {
+        setIsTyping(true);
+        // Can emit typing indicator event here if socket supports it
+    }
 
-                keyToUse = privatekey + serverkey;
-                await AsyncStorage.setItem("secretkey", keyToUse);
-                setSecretKey(keyToUse);
-            }
+    // Set timeout to emit typing stopped after 3 seconds of no input
+    if (text.length > 0) {
+        typingTimeoutRef.current = setTimeout(() => {
+            setIsTyping(false);
+            // Can emit typing stopped event here
+        }, 3000);
+    } else {
+        setIsTyping(false);
+    }
+}, [isTyping]);
 
-            const text = message.trim();
-            const timestamp = Date.now();
-            const newMsg: Message = {
-                from: "Me",
-                message: text,
-                timestamp: timestamp,
-            };
+const handleSend = useCallback(async () => {
+    try {
+        if (!message.trim()) return;
 
-            setMessage("");
-            setMessages((prev) => {
-                const updated = [...prev, newMsg];
-                AsyncStorage.setItem(chatId, JSON.stringify(updated));
-                return updated;
-            });
+        let keyToUse = secretKey;
 
-            const encryptedMsg = encryptMessage(text, keyToUse);
+        if (!keyToUse) {
+            const privatekey = await AsyncStorage.getItem("privatekey");
+            const serverkey = await AsyncStorage.getItem("serverkey");
 
-            if (!encryptedMsg || encryptedMsg === text) {
-                console.warn("Message encryption may have failed");
-            }
-
-            const publickey = keyToUse.substring(0, 16);
-
-            sendMessage(contactPhone, encryptedMsg, publickey, undefined, deviceId);
-
-        } catch (error) {
-            console.error("Error sending message:", error);
-            Alert.alert("Error", "Failed to send message");
-        }
-    }, [message, secretKey, chatId, contactPhone, sendMessage, encryptMessage]);
-
-
-    const handleAttachDocument = async () => {
-        try {
-            const results = await pick({
-                type: [types.allFiles],
-                allowMultiSelection: true,
-                quality: 1,
-            });
-
-            console.log(`Selected ${results.length} file(s)`);
-
-            const maxSize = 10 * 1024 * 1024;
-            const oversizedFiles = results.filter(file => file.size && file.size > maxSize);
-
-            if (oversizedFiles.length > 0) {
-                Alert.alert('Error', `${oversizedFiles.length} file(s) exceed 10MB limit`);
+            if (!privatekey || !serverkey) {
+                console.error("Encryption keys not found. Please login again.");
+                Alert.alert("Error", "Encryption keys not found. Please login again.");
                 return;
             }
 
-            // Show loading indicator
-            Alert.alert('Uploading', 'Please wait...');
-
-            const uploadPromises = results.map(async (file) => {
-                const fileurl = await uploadDocumentToCloudinary(file.uri, file.type, file.name);
-                return { file, fileurl };
-            });
-
-            const uploadedFiles = await Promise.all(uploadPromises);
-
-            // Navigate to preview screen
-            navigation.navigate('PreviewDocuments', {
-                uploadedFiles,
-                myPhone,
-                contactPhone,
-                chatId,
-            });
-
-        } catch (err: any) {
-            if (err?.code !== 'DOCUMENT_PICKER_CANCELED') {
-                console.error('Error picking document:', err);
-                Alert.alert('Error', 'Failed to attach documents');
-            }
+            keyToUse = privatekey + serverkey;
+            await AsyncStorage.setItem("secretkey", keyToUse);
+            setSecretKey(keyToUse);
         }
-    };
 
+        const text = message.trim();
+        const timestamp = Date.now();
+        const newMsg: Message = {
+            from: "Me",
+            message: text,
+            timestamp: timestamp,
+        };
 
-    const uploadDocumentToCloudinary = async (imageUri: string, filetype: string, filename: string) => {
-        try {
-            const formData = new FormData();
-            formData.append('file', {
-                uri: imageUri,
-                type: filetype,
-                name: filename,
-            } as any);
-            formData.append('upload_preset', 'chatter_unsigned');
+        setMessage("");
+        setMessages((prev) => {
+            const updated = [...prev, newMsg];
+            AsyncStorage.setItem(chatId, JSON.stringify(updated));
+            return updated;
+        });
 
-            const response = await axios.post(
-                'https://api.cloudinary.com/v1_1/dqmxpgv5k/image/upload',
-                formData,
-                { headers: { 'Content-Type': 'multipart/form-data' } }
-            );
-            return response.data.secure_url;
-        } catch (error) {
-            console.error('Error uploading image:', error);
-            throw error;
+        const encryptedMsg = encryptMessage(text, keyToUse);
+
+        if (!encryptedMsg || encryptedMsg === text) {
+            console.warn("Message encryption may have failed");
         }
-    };
 
-    // Auto-scroll to bottom
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-        return () => clearTimeout(timer);
-    }, [messages]);
+        const publickey = keyToUse.substring(0, 16);
+
+        sendMessage(contactPhone, encryptedMsg, publickey, undefined, deviceId);
+
+    } catch (error) {
+        console.error("Error sending message:", error);
+        Alert.alert("Error", "Failed to send message");
+    }
+}, [message, secretKey, chatId, contactPhone, sendMessage, encryptMessage, deviceId]);
 
 
-    const renderMessage = ({ item }: { item: Message }) => {
-        const isMe = item.from === "Me";
-        const file = item.file;
+const handleAttachDocument = async () => {
+    try {
+        const results = await pick({
+            type: [types.allFiles],
+            allowMultiSelection: true,
+            quality: 1,
+        });
 
-        return (
-            <View style={[styles.msgWrap, { alignSelf: isMe ? "flex-end" : "flex-start" }]}>
-                <View style={[styles.bubble, isMe ? styles.mine : styles.theirs]}>
+        console.log(`Selected ${results.length} file(s)`);
 
-                    <Text style={styles.msgText}>{item.message}</Text>
-                    {/* Time */}
-                    <Text style={styles.time}>
-                        {new Date(item.timestamp).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                        })}
-                    </Text>
+        const maxSize = 10 * 1024 * 1024;
+        const oversizedFiles = results.filter(file => file.size && file.size > maxSize);
 
-                </View>
-            </View>
+        if (oversizedFiles.length > 0) {
+            Alert.alert('Error', `${oversizedFiles.length} file(s) exceed 10MB limit`);
+            return;
+        }
+
+        // Show loading indicator
+        Alert.alert('Uploading', 'Please wait...');
+
+        const uploadPromises = results.map(async (file) => {
+            const fileurl = await uploadDocumentToCloudinary(file.uri, file.type, file.name);
+            return { file, fileurl };
+        });
+
+        const uploadedFiles = await Promise.all(uploadPromises);
+
+        // Navigate to preview screen
+        navigation.navigate('PreviewDocuments', {
+            uploadedFiles,
+            myPhone,
+            contactPhone,
+            chatId,
+        });
+
+    } catch (err: any) {
+        if (err?.code !== 'DOCUMENT_PICKER_CANCELED') {
+            console.error('Error picking document:', err);
+            Alert.alert('Error', 'Failed to attach documents');
+        }
+    }
+};
+
+
+const uploadDocumentToCloudinary = async (imageUri: string, filetype: string, filename: string) => {
+    try {
+        const formData = new FormData();
+        formData.append('file', {
+            uri: imageUri,
+            type: filetype,
+            name: filename,
+        } as any);
+        formData.append('upload_preset', 'chatter_unsigned');
+
+        const response = await axios.post(
+            'https://api.cloudinary.com/v1_1/dqmxpgv5k/image/upload',
+            formData,
+            { headers: { 'Content-Type': 'multipart/form-data' } }
         );
-    };
+        return response.data.secure_url;
+    } catch (error) {
+        console.error('Error uploading image:', error);
+        throw error;
+    }
+};
+
+// Auto-scroll to bottom
+useEffect(() => {
+    const timer = setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+    return () => clearTimeout(timer);
+}, [messages]);
 
 
+const renderMessage = ({ item }: { item: Message }) => {
+    const isMe = item.from === "Me";
+    const file = item.file;
 
     return (
-        <KeyboardAvoidingView
-            style={styles.container}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
-        >
-            <View style={styles.backgroundOverlay} />
-            <View style={styles.header}>
-                {contactAvatar ? (
-                    <Image
-                        source={{ uri: contactAvatar }}
-                        style={styles.avatarImage}
-                    />
-                ) : (
-                    <View style={styles.avatarPlaceholder}>
-                        <Text style={styles.avatarText}>U</Text>
-                    </View>
-                )}
-                <View style={styles.headerContent}>
-                    <Text style={styles.headerTitle}>{contactName}</Text>
-                    <Text style={[styles.statusText, { color: contactIsOnline ? "#00D4C2" : "#A9A9C5" }]}>
-                        {contactIsOnline ? "● Online" : "● Offline"}
-                    </Text>
-                </View>
+        <View style={[styles.msgWrap, { alignSelf: isMe ? "flex-end" : "flex-start" }]}>
+            <View style={[styles.bubble, isMe ? styles.mine : styles.theirs]}>
+
+                <Text style={styles.msgText}>{item.message}</Text>
+                {/* Time */}
+                <Text style={styles.time}>
+                    {new Date(item.timestamp).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                    })}
+                </Text>
+
             </View>
-
-            {loading ? (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#00D4C2" />
-                </View>
-            ) : (
-                <FlatList
-                    ref={flatListRef}
-                    data={messages}
-                    keyExtractor={(item, i) => `${item.timestamp}_${i}`}
-                    renderItem={renderMessage}
-                    contentContainerStyle={styles.messageList}
-                    onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-                />
-            )}
-
-            <View style={styles.inputRow}>
-                <TouchableOpacity
-                    style={styles.attachButton}
-                    onPress={handleAttachDocument}
-                >
-                    <Image
-                        source={require('../../assets/attach.png')}
-                        style={styles.sendicon}
-                        color="red"
-                    />
-                </TouchableOpacity>
-
-                <TextInput
-                    style={styles.input}
-                    placeholder="Type a message..."
-                    placeholderTextColor="#A9A9C5"
-                    value={message}
-                    onChangeText={setMessage}
-                    multiline
-                    maxLength={1000}
-                />
-
-                <TouchableOpacity
-                    style={[
-                        styles.sendButton,
-                        !message.trim() && styles.sendButtonDisabled,
-                    ]}
-                    disabled={!message.trim()}
-                    onPress={handleSend}
-                >
-                    <Image
-                        source={require('../../assets/send.png')}
-                        style={styles.sendicon}
-                    />
-                </TouchableOpacity>
-            </View>
-        </KeyboardAvoidingView>
+        </View>
     );
+};
+
+
+
+return (
+    <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+    >
+        <View style={styles.backgroundOverlay} />
+        <View style={styles.header}>
+            {contactAvatar ? (
+                <Image
+                    source={{ uri: contactAvatar }}
+                    style={styles.avatarImage}
+                />
+            ) : (
+                <View style={styles.avatarPlaceholder}>
+                    <Text style={styles.avatarText}>U</Text>
+                </View>
+            )}
+            <View style={styles.headerContent}>
+                <Text style={styles.headerTitle}>{contactName}</Text>
+                <Text style={[styles.statusText, { color: contactIsOnline ? "#00D4C2" : "#A9A9C5" }]}>
+                    {contactIsOnline ? "● Online" : "● Offline"}
+                </Text>
+            </View>
+        </View>
+
+        {loading ? (
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#00D4C2" />
+            </View>
+        ) : (
+            <FlatList
+                ref={flatListRef}
+                data={messages}
+                keyExtractor={(item, i) => `${item.timestamp}_${i}`}
+                renderItem={renderMessage}
+                contentContainerStyle={styles.messageList}
+                onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+            />
+        )}
+
+        <View style={styles.inputRow}>
+            <TouchableOpacity
+                style={styles.attachButton}
+                onPress={handleAttachDocument}
+            >
+                <Image
+                    source={require('../../assets/attach.png')}
+                    style={styles.sendicon}
+                    color="red"
+                />
+            </TouchableOpacity>
+
+            <TextInput
+                style={styles.input}
+                placeholder="Type a message..."
+                placeholderTextColor="#A9A9C5"
+                value={message}
+                onChangeText={handleTextChange}
+                multiline
+                maxLength={1000}
+            />
+
+            <TouchableOpacity
+                style={[
+                    styles.sendButton,
+                    !message.trim() && styles.sendButtonDisabled,
+                ]}
+                disabled={!message.trim()}
+                onPress={handleSend}
+            >
+                <Image
+                    source={require('../../assets/send.png')}
+                    style={styles.sendicon}
+                />
+            </TouchableOpacity>
+        </View>
+    </KeyboardAvoidingView>
+);
 }
 const styles = StyleSheet.create({
     container: {
