@@ -21,7 +21,6 @@ const userSchema = new mongoose.Schema({
     },
     otpExpiry: {
         type: Date,
-        required: true,
     },
     isverified: {
         type: Boolean,
