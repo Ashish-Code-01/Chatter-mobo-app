@@ -381,7 +381,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
         return () => {
             offBulkMessageSync();
         };
-    }, [isConnected, contactPhone, myPhone, secretKey, chatId, messages, dedupeMessages, onBulkMessageSync, offBulkMessageSync]);
+    }, []);
 
     // Setup typing indicator handler
     useEffect(() => {
