@@ -172,3 +172,105 @@ export const syncMessagesForDevice = async (req, res) => {
         });
     }
 };
+
+// Update message status (delivered/seen)
+export const updateMessageStatus = async (req, res) => {
+    try {
+        const userPhoneNumber = req.user?.phoneNumber;
+        const { messageId, status } = req.body;
+
+        if (!userPhoneNumber) {
+            return res.status(401).json({
+                success: false,
+                error: "Unauthorized: user not found."
+            });
+        }
+
+        if (!messageId || !status) {
+            return res.status(400).json({
+                success: false,
+                error: "messageId and status are required."
+            });
+        }
+
+        if (!['sent', 'delivered', 'seen'].includes(status)) {
+            return res.status(400).json({
+                success: false,
+                error: "Invalid status. Must be 'sent', 'delivered', or 'seen'."
+            });
+        }
+
+        const updateData = { status };
+        if (status === 'seen') {
+            updateData.seen = true;
+        }
+
+        const message = await Message.findByIdAndUpdate(
+            messageId,
+            updateData,
+            { new: true }
+        );
+
+        if (!message) {
+            return res.status(404).json({
+                success: false,
+                error: "Message not found."
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `Message status updated to '${status}'`,
+            data: message
+        });
+    } catch (error) {
+        console.error("Error updating message status:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Internal server error."
+        });
+    }
+};
+
+// Mark all messages from a user as delivered
+export const markMessagesDelivered = async (req, res) => {
+    try {
+        const userPhoneNumber = req.user?.phoneNumber;
+        const { otherUserPhoneNumber } = req.body;
+
+        if (!userPhoneNumber) {
+            return res.status(401).json({
+                success: false,
+                error: "Unauthorized: user not found."
+            });
+        }
+
+        if (!otherUserPhoneNumber) {
+            return res.status(400).json({
+                success: false,
+                error: "otherUserPhoneNumber is required."
+            });
+        }
+
+        const result = await Message.updateMany(
+            {
+                sender: otherUserPhoneNumber,
+                receiver: userPhoneNumber,
+                status: { $in: ['sent', 'delivered'] }
+            },
+            { status: "delivered" }
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: `Marked ${result.modifiedCount} messages as delivered`,
+            modifiedCount: result.modifiedCount
+        });
+    } catch (error) {
+        console.error("Error marking messages as delivered:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Internal server error."
+        });
+    }
+};

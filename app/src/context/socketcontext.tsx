@@ -25,16 +25,20 @@ interface SocketContextType {
     linkDevice: (socketId: string, token: string, privatekey: string, serverkey: string, Users?: any, deviceId?: string) => boolean;
     registerDevice: (phoneNumber: string, deviceId: string) => void;
     requestMessageSync: (phoneNumber: string, deviceId: string) => void;
+    markMessageDelivered: (messageId: string, receiverPhone: string) => void;
+    markMessageSeen: (messageId: string, receiverPhone: string) => void;
     onMessageReceived: (callback: (data: any) => void) => void;
     onStatusChanged: (callback: (data: any) => void) => void;
     onMessageSynced: (callback: (data: any) => void) => void;
     onBulkMessageSync: (callback: (data: any) => void) => void;
     onDeviceLinked: (callback: (data: any) => void) => void;
+    onMessageStatusChanged: (callback: (data: any) => void) => void;
     offMessageReceived: () => void;
     offStatusChanged: () => void;
     offMessageSynced: () => void;
     offBulkMessageSync: () => void;
     offDeviceLinked: () => void;
+    offMessageStatusChanged: () => void;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
@@ -56,6 +60,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     const messageSyncedCallbackRef = useRef<((data: any) => void) | null>(null);
     const bulkMessageSyncCallbackRef = useRef<((data: any) => void) | null>(null);
     const deviceLinkedCallbackRef = useRef<((data: any) => void) | null>(null);
+    const messageStatusChangedCallbackRef = useRef<((data: any) => void) | null>(null);
 
     // Initialize Socket Connection
     useEffect(() => {
@@ -131,6 +136,18 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
                 deviceLinkedCallbackRef.current?.(data);
             });
 
+            // Message status changed event
+            socketRef.current.on('messageStatusChanged', (data: any) => {
+                console.log('✓ Message status changed:', data);
+                messageStatusChangedCallbackRef.current?.(data);
+            });
+
+            // Bulk message status changed event
+            socketRef.current.on('bulkMessageStatusChanged', (data: any) => {
+                console.log('✓✓ Bulk message status changed:', data);
+                messageStatusChangedCallbackRef.current?.(data);
+            });
+
             // Sync error
             socketRef.current.on('syncError', (data: any) => {
                 console.error('❌ Sync error:', data);
@@ -151,6 +168,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
                 socketRef.current.off('messageSynced');
                 socketRef.current.off('bulkMessageSync');
                 socketRef.current.off('DeviceLinked');
+                socketRef.current.off('messageStatusChanged');
+                socketRef.current.off('bulkMessageStatusChanged');
                 socketRef.current.off('syncError');
             }
         };
@@ -336,6 +355,41 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         socketRef.current.emit('requestMessageSync', { phoneNumber, deviceId });
     }, []);
 
+    // Mark message as delivered
+    const markMessageDelivered = useCallback((messageId: string, receiverPhone: string) => {
+        if (!socketRef.current) {
+            console.error('Socket not initialized');
+            return;
+        }
+
+        if (!socketRef.current.connected) {
+            console.warn('Socket not connected for marking message as delivered');
+            socketRef.current.once('connect', () => {
+                socketRef.current?.emit('messageDelivered', { messageId, receiverPhone });
+            });
+            return;
+        }
+
+        socketRef.current.emit('messageDelivered', { messageId, receiverPhone });
+    }, []);
+
+    // Mark message as seen
+    const markMessageSeen = useCallback((messageId: string, receiverPhone: string) => {
+        if (!socketRef.current) {
+            console.error('Socket not initialized');
+            return;
+        }
+
+        if (!socketRef.current.connected) {
+            console.warn('Socket not connected for marking message as seen');
+            socketRef.current.once('connect', () => {
+                socketRef.current?.emit('messageSeen', { messageId, receiverPhone });
+            });
+            return;
+        }
+
+        socketRef.current.emit('messageSeen', { messageId, receiverPhone });
+    }, []);
 
     // Register message callback
     const onMessageReceived = useCallback((callback: (data: any) => void) => {
@@ -387,6 +441,16 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         deviceLinkedCallbackRef.current = null;
     }, []);
 
+    // Register message status changed callback
+    const onMessageStatusChanged = useCallback((callback: (data: any) => void) => {
+        messageStatusChangedCallbackRef.current = callback;
+    }, []);
+
+    // Unregister message status changed callback
+    const offMessageStatusChanged = useCallback(() => {
+        messageStatusChangedCallbackRef.current = null;
+    }, []);
+
 
     const value: SocketContextType = {
         socket: socketRef.current,
@@ -405,12 +469,16 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         linkDevice,
         registerDevice,
         requestMessageSync,
+        markMessageDelivered,
+        markMessageSeen,
         onMessageSynced,
         onBulkMessageSync,
         onDeviceLinked,
+        onMessageStatusChanged,
         offMessageSynced,
         offBulkMessageSync,
         offDeviceLinked,
+        offMessageStatusChanged,
     };
 
     return (

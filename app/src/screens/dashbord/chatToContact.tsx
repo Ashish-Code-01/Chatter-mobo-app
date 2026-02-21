@@ -16,23 +16,20 @@ import { Alert } from "react-native";
 import { pick, types } from '@react-native-documents/picker';
 import axios from "axios";
 import { useSocket } from "../../context/socketcontext";
+import MessageTicks from "../../components/MessageTicks";
 
 const API_URL = "https://chatter-mobo-app.onrender.com";
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dqmxpgv5k/image/upload/v1765892967/A_circular_default_c_cafouy.png";
 
 // Interface for bulk sync messages
-interface BulkSyncData {
-    messages: any[];
-    batchNumber: number;
-    totalBatches: number;
-    isLastBatch?: boolean;
-}
 
 interface Message {
     from: string;
     message: string;
     timestamp: number;
     file?: any;
+    messageId?: string;
+    status?: 'sent' | 'delivered' | 'seen';
 }
 
 interface RouteParams {
@@ -43,7 +40,7 @@ interface RouteParams {
 
 export default function ChatToContact({ route, navigation }: { route: { params: RouteParams }, navigation: any }) {
     const { myPhone, contactPhone, contactName } = route.params;
-    const { isConnected, onMessageReceived, offMessageReceived, onStatusChanged, offStatusChanged, sendMessage, onMessageSynced, offMessageSynced, requestMessageSync, onBulkMessageSync, offBulkMessageSync } = useSocket();
+    const { isConnected, onMessageReceived, offMessageReceived, onStatusChanged, offStatusChanged, sendMessage, onMessageSynced, offMessageSynced, requestMessageSync, onMessageStatusChanged, offMessageStatusChanged, markMessageDelivered, markMessageSeen } = useSocket();
 
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
@@ -54,7 +51,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
     const [deviceId, setDeviceId] = useState<string>("");
     const [isTyping, setIsTyping] = useState(false);
     const [contactTyping, setContactTyping] = useState(false);
-    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const typingTimeoutRef = useRef<any>(null);
 
     const alphabet = useMemo(() => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!'_-&@#$%*()/:<>|+= ", []);
 
@@ -112,10 +109,26 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                 { receiverPhoneNumber: contactPhone },
                 { headers: { token } }
             );
+
+            // Mark all messages from contact as seen locally
+            setMessages((prev) => {
+                const updated = prev.map((msg) => {
+                    if (msg.from !== "Me" && msg.status !== 'seen') {
+                        // Emit messageSeen event for this message
+                        if (msg.messageId && !msg.messageId.startsWith('temp_')) {
+                            markMessageSeen(msg.messageId, myPhone);
+                        }
+                        return { ...msg, status: 'seen' as const };
+                    }
+                    return msg;
+                });
+                AsyncStorage.setItem(chatId, JSON.stringify(updated));
+                return updated;
+            });
         } catch (error: any) {
             console.error("Error marking messages as seen:", error.message);
         }
-    }, [contactPhone]);
+    }, [contactPhone, chatId, myPhone, markMessageSeen]);
 
     // Encrypt Message
     const encryptMessage = (text: string, key: string): string => {
@@ -171,7 +184,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
     useEffect(() => {
         if (!isConnected) return;
 
-        const handleMessageReceived = async ({ from, message: encryptedMsg, publickey, files }: { from: string; message: string; publickey: string, files: [] }) => {
+        const handleMessageReceived = async ({ from, message: encryptedMsg, publickey, files, messageId, status }: { from: string; message: string; publickey: string, files: [], messageId?: string; status?: string }) => {
             console.log(`Message from ${from}: ${encryptedMsg}`);
             try {
                 if (from === myPhone) return;
@@ -207,6 +220,8 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                     message: decryptedMsg,
                     timestamp: Date.now(),
                     file: files || undefined,
+                    messageId,
+                    status: 'delivered',  // Mark received messages as delivered
                 };
 
                 setMessages((prev) => {
@@ -214,6 +229,11 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                     AsyncStorage.setItem(chatId, JSON.stringify(merged));
                     return merged;
                 });
+
+                // Emit messageDelivered event to notify sender
+                if (messageId) {
+                    markMessageDelivered(messageId, myPhone);
+                }
             } catch (error) {
                 console.error("Error receiving message:", error);
             }
@@ -317,71 +337,6 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
         };
     }, [isConnected, contactPhone, myPhone, secretKey, chatId, messages, dedupeMessages, onMessageSynced, offMessageSynced]);
 
-    // Setup bulk message sync listener (for initial sync after device links)
-    useEffect(() => {
-        if (!isConnected) return;
-
-        const handleBulkMessageSync = async (data: BulkSyncData) => {
-            try {
-                console.log(`📦 Processing bulk sync batch ${data.batchNumber}/${data.totalBatches}`);
-
-                for (const msg of data.messages) {
-                    // Skip messages not relevant to this chat
-                    if ((msg.sender !== contactPhone && msg.receiver !== contactPhone) ||
-                        (msg.sender !== myPhone && msg.receiver !== myPhone)) {
-                        continue;
-                    }
-
-                    // Skip if message already exists
-                    const msgTimestamp = msg.timestamp ? new Date(msg.timestamp).getTime() : msg.createdAt?.getTime() || Date.now();
-                    const existingMsg = messages.find(m => Math.abs(m.timestamp - msgTimestamp) < 1000);
-                    if (existingMsg) continue;
-
-                    let keyToUse = secretKey;
-                    if (!keyToUse && msg.publickey) {
-                        const privatekey = await AsyncStorage.getItem("privatekey");
-                        if (privatekey) {
-                            keyToUse = msg.publickey + privatekey;
-                        } else {
-                            const serverkey = await AsyncStorage.getItem("serverkey");
-                            if (serverkey) {
-                                keyToUse = msg.publickey + serverkey;
-                            }
-                        }
-                    }
-
-                    if (!keyToUse) continue;
-
-                    const decryptedContent = decryptMessage(msg.content || msg.message, keyToUse);
-
-                    const newMsg: Message = {
-                        from: msg.sender === myPhone ? "Me" : msg.sender,
-                        message: decryptedContent,
-                        timestamp: msgTimestamp,
-                        file: msg.file || msg.files || undefined,
-                    };
-
-                    setMessages((prev) => {
-                        const merged = dedupeMessages([...prev, newMsg]).sort(
-                            (a, b) => a.timestamp - b.timestamp
-                        );
-                        AsyncStorage.setItem(chatId, JSON.stringify(merged));
-                        return merged;
-                    });
-                }
-
-                console.log(`✅ Bulk sync batch ${data.batchNumber} processed`);
-            } catch (error) {
-                console.error("Error processing bulk message sync:", error);
-            }
-        };
-
-        onBulkMessageSync(handleBulkMessageSync);
-
-        return () => {
-            offBulkMessageSync();
-        };
-    }, []);
 
     // Setup typing indicator handler
     useEffect(() => {
@@ -397,6 +352,31 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
             offStatusChanged();
         };
     }, [contactPhone, onStatusChanged, offStatusChanged]);
+
+    // Setup message status listener (for delivery and read receipts)
+    useEffect(() => {
+        const handleMessageStatusChanged = ({ messageId, status }: { messageId: string; status: 'sent' | 'delivered' | 'seen' }) => {
+            if (!messageId) return;
+
+            setMessages((prev) => {
+                const updated = prev.map((msg) => {
+                    if (msg.messageId === messageId || (msg.timestamp && msg.from === 'Me')) {
+                        // Update the message status
+                        return { ...msg, messageId, status };
+                    }
+                    return msg;
+                });
+                AsyncStorage.setItem(chatId, JSON.stringify(updated));
+                return updated;
+            });
+        };
+
+        onMessageStatusChanged(handleMessageStatusChanged);
+
+        return () => {
+            offMessageStatusChanged();
+        };
+    }, [chatId, onMessageStatusChanged, offMessageStatusChanged]);
 
     useEffect(() => {
         (async () => {
@@ -478,12 +458,14 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
 
             const backendMsgs: Message[] = raw.map((msg: any) => {
                 try {
-                    const decryptedContent = decryptMessage(msg.content, secretkey);
+                    const decryptedContent = decryptMessage(msg.content, secretkey || "");
 
                     return {
                         from: msg.sender === myPhone ? "Me" : msg.sender,
                         message: decryptedContent,
                         timestamp: new Date(msg.createdAt).getTime(),
+                        messageId: msg._id,
+                        status: (msg.status as 'sent' | 'delivered' | 'seen') || 'sent',
                     };
                 } catch (error) {
                     console.error("Error decrypting message:", error);
@@ -491,6 +473,8 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                         from: msg.sender === myPhone ? "Me" : msg.sender,
                         message: "[Decryption failed]",
                         timestamp: new Date(msg.createdAt).getTime(),
+                        messageId: msg._id,
+                        status: (msg.status as 'sent' | 'delivered' | 'seen') || 'sent',
                     };
                 }
             });
@@ -558,10 +542,13 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
 
             const text = message.trim();
             const timestamp = Date.now();
+            const tempMessageId = `temp_${timestamp}_${Math.random()}`; // Temporary ID for tracking
             const newMsg: Message = {
                 from: "Me",
                 message: text,
                 timestamp: timestamp,
+                messageId: tempMessageId,
+                status: 'sent',
             };
 
             setMessage("");
@@ -610,7 +597,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
             Alert.alert('Uploading', 'Please wait...');
 
             const uploadPromises = results.map(async (file) => {
-                const fileurl = await uploadDocumentToCloudinary(file.uri, file.type, file.name);
+                const fileurl = await uploadDocumentToCloudinary(file.uri || "", file.type || "", file.name || "document");
                 return { file, fileurl };
             });
 
@@ -673,13 +660,16 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                 <View style={[styles.bubble, isMe ? styles.mine : styles.theirs]}>
 
                     <Text style={styles.msgText}>{item.message}</Text>
-                    {/* Time */}
-                    <Text style={styles.time}>
-                        {new Date(item.timestamp).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                        })}
-                    </Text>
+                    {/* Time and Status Ticks */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Text style={styles.time}>
+                            {new Date(item.timestamp).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                            })}
+                        </Text>
+                        {isMe && item.status && <MessageTicks status={item.status} />}
+                    </View>
 
                 </View>
             </View>
@@ -901,9 +891,8 @@ const styles = StyleSheet.create({
         marginTop: 6,
         textAlign: "right",
         fontWeight: "400",
+        marginRight: 5,
     },
-
-    /* ==================== INPUT AREA ==================== */
     inputRow: {
         flexDirection: "row",
         alignItems: "flex-end",

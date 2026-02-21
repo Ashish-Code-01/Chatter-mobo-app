@@ -31,7 +31,7 @@ const PORT = process.env.PORT || 5000;
 // set up socket.io with CORS restrictions
 export const io = new Server(server, {
     cors: {
-        origin:"*", 
+        origin: "*",
         credentials: true,
         methods: ['GET', 'POST']
     },
@@ -135,6 +135,7 @@ io.on("connection", (socket) => {
                     file: files || null,
                     Publickey: publickey || "",  // Store public key for decryption
                     deviceId: deviceId || null,
+                    status: "sent",  // Default status is 'sent'
                     timestamp: new Date(),
                     createdAt: new Date()
                 });
@@ -143,6 +144,15 @@ io.on("connection", (socket) => {
                 socket.emit('error', { message: 'Failed to save message' });
                 return;
             }
+
+            // Emit messageStatusChanged event to sender socket (message saved = sent)
+            socket.emit("messageStatusChanged", {
+                messageId: savedMessage._id,
+                status: "sent",
+                from: from,
+                to: to
+            });
+            console.log(`📤 Message saved with status 'sent': ${savedMessage._id}`);
 
             if (receiverSocketId) {
                 // Receiver is online - send encrypted message directly
@@ -153,7 +163,8 @@ io.on("connection", (socket) => {
                     files: files || null,
                     publickey: publickey || "",
                     timestamp: savedMessage?.createdAt || new Date(),
-                    messageId: savedMessage?._id
+                    messageId: savedMessage?._id,
+                    status: "sent"
                 });
                 console.log(`✅ Message delivered to online receiver: ${to}`);
             }
@@ -256,6 +267,105 @@ io.on("connection", (socket) => {
         });
 
         console.log(`Device ${socket.id} linked to ${socketId}`);
+    });
+
+    // Mark message as delivered
+    socket.on("messageDelivered", async ({ messageId, receiverPhone }) => {
+        try {
+            if (!messageId || !receiverPhone) {
+                console.warn("Invalid messageDelivered payload");
+                return;
+            }
+
+            const message = await Message.findByIdAndUpdate(
+                messageId,
+                { status: "delivered" },
+                { new: true }
+            );
+
+            if (message) {
+                // Notify sender about delivery
+                const senderSocketId = connectedUsers.get(message.sender);
+                if (senderSocketId) {
+                    io.to(senderSocketId).emit("messageStatusChanged", {
+                        messageId: message._id,
+                        status: "delivered",
+                        from: message.sender,
+                        to: message.receiver
+                    });
+                }
+                console.log(`✅ Message ${messageId} marked as delivered`);
+            }
+        } catch (error) {
+            console.error("Error marking message as delivered:", error);
+        }
+    });
+
+    // Mark message as seen
+    socket.on("messageSeen", async ({ messageId, receiverPhone }) => {
+        try {
+            if (!messageId || !receiverPhone) {
+                console.warn("Invalid messageSeen payload");
+                return;
+            }
+
+            const message = await Message.findByIdAndUpdate(
+                messageId,
+                { status: "seen", seen: true },
+                { new: true }
+            );
+
+            if (message) {
+                // Notify sender about message being seen
+                const senderSocketId = connectedUsers.get(message.sender);
+                if (senderSocketId) {
+                    io.to(senderSocketId).emit("messageStatusChanged", {
+                        messageId: message._id,
+                        status: "seen",
+                        from: message.sender,
+                        to: message.receiver
+                    });
+                }
+                console.log(`👀 Message ${messageId} marked as seen`);
+            }
+        } catch (error) {
+            console.error("Error marking message as seen:", error);
+        }
+    });
+
+    // Mark all messages from a user as delivered
+    socket.on("markAllMessagesDelivered", async ({ phoneNumber, otherUserPhone }) => {
+        try {
+            if (!phoneNumber || !otherUserPhone) {
+                console.warn("Invalid markAllMessagesDelivered payload");
+                return;
+            }
+
+            const result = await Message.updateMany(
+                {
+                    sender: otherUserPhone,
+                    receiver: phoneNumber,
+                    status: "sent"
+                },
+                { status: "delivered" }
+            );
+
+            if (result.modifiedCount > 0) {
+                // Notify sender about bulk delivery
+                const senderSocketId = connectedUsers.get(otherUserPhone);
+                if (senderSocketId) {
+                    io.to(senderSocketId).emit("bulkMessageStatusChanged", {
+                        from: otherUserPhone,
+                        to: phoneNumber,
+                        status: "delivered",
+                        count: result.modifiedCount
+                    });
+                }
+                console.log(`✅ Marked ${result.modifiedCount} messages as delivered`);
+            }
+        } catch (error) {
+            console.error("Error marking all messages as delivered:", error);
+        }
     });
 
     // Request message sync for a device
