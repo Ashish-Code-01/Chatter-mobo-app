@@ -5,19 +5,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <meta name="description"
-        content="Chatter - A modern real-time messaging app that connects you instantly with seamless communication">
-    <meta name="keywords" content="messaging app, real-time chat, mobile app, communication">
-    <meta name="theme-color" content="#6366f1">
+        content="Chatter - Real-time messaging with end-to-end encryption. Chat instantly, link devices, and stay connected on mobile and web.">
+    <meta name="keywords" content="Chatter, messaging app, real-time chat, encrypted chat, link device, web chat">
+    <meta name="theme-color" content="#0F1419">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Chatter">
-    <meta name="format-detection" content="telephone=no">
-    <title>Chatter - Real-Time Messaging Made Simple</title>
+    <title>Chatter — Real-Time Messaging, Encrypted & Simple</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
 </head>
 
@@ -25,16 +24,16 @@
     <!-- Navigation -->
     <nav class="navbar">
         <div class="nav-container">
-            <div class="logo">
-                <span class="logo-icon">💬</span>
+            <a href="#" class="logo">
+                <span class="logo-icon">◆</span>
                 <span class="logo-text">Chatter</span>
-            </div>
+            </a>
 
-            <div class="hamburger" aria-label="Toggle menu" aria-expanded="false">
+            <button class="hamburger" aria-label="Toggle menu" aria-expanded="false">
                 <span></span>
                 <span></span>
                 <span></span>
-            </div>
+            </button>
 
             <div class="nav-wrapper">
                 <ul class="nav-menu">
@@ -43,9 +42,9 @@
                     <li><a href="#testimonials" class="nav-link">Testimonials</a></li>
                     <li><a href="#contact" class="nav-link">Contact</a></li>
                 </ul>
-
                 <div class="nav-actions">
-                    <button class="btn-primary">Download App</button>
+                    <a href="https://chatter-mobo-app.onrender.com" class="btn-outline" target="_blank" rel="noopener">Try Web App</a>
+                    <button class="btn-primary nav-download">Download App</button>
                 </div>
             </div>
         </div>
@@ -55,29 +54,29 @@
     <section class="hero">
         <div class="hero-content">
             <div class="hero-text">
+                <p class="hero-badge">Real-time • Encrypted • Multi-device</p>
                 <h1 class="hero-title">
-                    Connect. <span class="gradient-text">Chat.</span> Connect.
+                    Chat like it’s <span class="gradient-text">tomorrow.</span>
                 </h1>
                 <p class="hero-subtitle">
-                    Experience lightning-fast messaging with real-time notifications, online status indicators, and
-                    seamless communication. Stay connected with everyone that matters.
+                    Instant messaging with read receipts, online status, and linked devices. Use Chatter on your phone and in the browser — your chats stay in sync.
                 </p>
                 <div class="hero-buttons">
-                    <button class="btn-primary btn-large">Download Now</button>
-                    <button class="btn-outline btn-large">Watch Demo</button>
+                    <button class="btn-primary btn-large hero-download">Download for Android</button>
+                    <a href="https://chatter-mobo-app.onrender.com" class="btn-outline btn-large" target="_blank" rel="noopener">Open Web App</a>
                 </div>
                 <div class="hero-stats">
                     <div class="stat">
                         <span class="stat-number">1K+</span>
-                        <span class="stat-label">Messages Daily</span>
+                        <span class="stat-label">Messages daily</span>
                     </div>
                     <div class="stat">
-                        <span class="stat-number">1K+</span>
-                        <span class="stat-label">Active Users</span>
+                        <span class="stat-number">E2E</span>
+                        <span class="stat-label">Encrypted</span>
                     </div>
                     <div class="stat">
-                        <span class="stat-number">5+</span>
-                        <span class="stat-label">Countries</span>
+                        <span class="stat-number">✓</span>
+                        <span class="stat-label">Read receipts</span>
                     </div>
                 </div>
             </div>
@@ -85,20 +84,20 @@
                 <div class="phone-mockup">
                     <div class="phone-screen">
                         <div class="chat-preview">
-                            <div class="chat-message sender">You're amazing!</div>
-                            <div class="chat-message receiver">Thanks! You too! 🎉</div>
-                            <div class="chat-message sender">Let's meet up soon</div>
+                            <div class="chat-message sender">Hey, you free later?</div>
+                            <div class="chat-message receiver">Yes! 7pm? ☕</div>
+                            <div class="chat-message sender">Perfect, see you then</div>
                             <div class="chat-status online">● Online</div>
                         </div>
                     </div>
                 </div>
                 <div class="floating-card card-1">
                     <span class="card-emoji">⚡</span>
-                    <span class="card-text">Instant Delivery</span>
+                    <span class="card-text">Instant delivery</span>
                 </div>
                 <div class="floating-card card-2">
                     <span class="card-emoji">🔒</span>
-                    <span class="card-text">Secure & Private</span>
+                    <span class="card-text">Encrypted</span>
                 </div>
             </div>
         </div>
@@ -108,39 +107,39 @@
     <!-- Features Section -->
     <section id="features" class="features">
         <div class="section-header">
-            <h2>Powerful Features</h2>
-            <p>Everything you need for perfect conversations</p>
+            <h2>Built for how you chat</h2>
+            <p>Everything you need in one place</p>
         </div>
         <div class="features-grid">
             <div class="feature-card">
                 <div class="feature-icon">💬</div>
-                <h3>Real-Time Messaging</h3>
-                <p>Send and receive messages instantly with lightning-fast delivery and zero delays.</p>
+                <h3>Real-time messaging</h3>
+                <p>Send and receive messages instantly with no delay. Typing indicators and live presence.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">🟢</div>
-                <h3>Online Status</h3>
-                <p>Know instantly when your contacts are available with real-time presence indicators.</p>
+                <h3>Online status</h3>
+                <p>See when contacts are online. Last seen and delivery status so you’re always in the loop.</p>
             </div>
             <div class="feature-card">
-                <div class="feature-icon">✓</div>
-                <h3>Read Receipts</h3>
-                <p>See when your messages have been delivered and read with detailed status indicators.</p>
+                <div class="feature-icon">✓✓</div>
+                <h3>Read receipts</h3>
+                <p>Delivered and seen ticks. Know when your message was read without asking.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">📱</div>
-                <h3>Multi-Platform</h3>
-                <p>Seamlessly switch between Android and iOS with synchronized messaging across devices.</p>
+                <h3>Link devices</h3>
+                <p>Use Chatter on your phone and in the browser. Scan a QR code and your chats sync.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon">🔐</div>
-                <h3>Bank-Level Security</h3>
-                <p>Your conversations are encrypted and protected with enterprise-grade security measures.</p>
+                <h3>End-to-end style encryption</h3>
+                <p>Your conversations are protected. We don’t read your messages.</p>
             </div>
             <div class="feature-card">
-                <div class="feature-icon">⏰</div>
-                <h3>Last Seen Timestamp</h3>
-                <p>Never miss important moments with accurate last seen information for all your contacts.</p>
+                <div class="feature-icon">📎</div>
+                <h3>Share files</h3>
+                <p>Send documents and media in the chat. Simple and fast.</p>
             </div>
         </div>
     </section>
@@ -148,80 +147,75 @@
     <!-- Why Chatter Section -->
     <section id="why-chatter" class="why-chatter">
         <div class="section-header">
-            <h2>Why Choose Chatter?</h2>
-            <p>Built for modern communication</p>
+            <h2>Why Chatter?</h2>
+            <p>Designed for real people and real conversations</p>
         </div>
         <div class="why-grid">
             <div class="why-card">
                 <div class="why-number">01</div>
-                <h3>Lightning Fast</h3>
-                <p>Optimized infrastructure ensures your messages arrive in milliseconds, not seconds.</p>
+                <h3>Fast</h3>
+                <p>Optimized for speed. Messages go out and arrive in real time.</p>
             </div>
             <div class="why-card">
                 <div class="why-number">02</div>
-                <h3>User Friendly</h3>
-                <p>Intuitive design means anyone can use Chatter, no learning curve required.</p>
+                <h3>Simple</h3>
+                <p>Clean interface. No clutter. Just open and chat.</p>
             </div>
             <div class="why-card">
                 <div class="why-number">03</div>
-                <h3>Always Available</h3>
-                <p>99.9% uptime guarantee ensures you're always connected when you need it most.</p>
+                <h3>Everywhere</h3>
+                <p>Phone and web. One account, same chats on all your devices.</p>
             </div>
             <div class="why-card">
                 <div class="why-number">04</div>
-                <h3>Privacy First</h3>
-                <p>Your data is yours. We don't sell, share, or abuse your personal information.</p>
+                <h3>Private</h3>
+                <p>Your data stays yours. No selling, no creepy tracking.</p>
             </div>
         </div>
     </section>
 
-    <!-- Features Showcase Section -->
+    <!-- Showcase Section -->
     <section class="showcase">
         <div class="showcase-item">
             <div class="showcase-content">
-                <h2>Crystal Clear Communication</h2>
-                <p>Experience conversations like never before with our advanced messaging system. Perfect message
-                    delivery with real-time notifications keeps you always in sync.</p>
+                <h2>One chat, every device</h2>
+                <p>Start on your phone, continue in the browser. Link your device with a quick QR scan and your messages sync automatically.</p>
                 <ul class="feature-list">
-                    <li>✓ Instant message delivery</li>
-                    <li>✓ Real-time push notifications</li>
-                    <li>✓ Message search and history</li>
+                    <li>Link phone and web</li>
+                    <li>Messages sync in real time</li>
+                    <li>No re-downloading history</li>
                 </ul>
             </div>
             <div class="showcase-image">
                 <div class="image-placeholder">📲</div>
             </div>
         </div>
-
         <div class="showcase-item reverse">
             <div class="showcase-content">
-                <h2>Stay Connected Everywhere</h2>
-                <p>Whether you're on Android or iOS, your conversations sync seamlessly. Switch between devices without
-                    missing a beat.</p>
+                <h2>See who’s online</h2>
+                <p>Presence and read receipts built in. No guessing — you’ll see when they’re online and when they’ve read your message.</p>
                 <ul class="feature-list">
-                    <li>✓ Multi-platform support</li>
-                    <li>✓ Automatic cloud sync</li>
-                    <li>✓ Offline message queue</li>
+                    <li>Online / offline status</li>
+                    <li>Delivered and read ticks</li>
+                    <li>Typing indicators</li>
                 </ul>
             </div>
             <div class="showcase-image">
-                <div class="image-placeholder">🌐</div>
+                <div class="image-placeholder">🟢</div>
             </div>
         </div>
-
         <div class="showcase-item">
             <div class="showcase-content">
-                <h2>Never Miss Important Moments</h2>
-                <p>Unread message badges and presence indicators ensure you always know what's happening. Last seen
-                    timestamps keep you in the loop.</p>
+                <h2>Chat without the noise</h2>
+                <p>Focus on the conversation. Dark theme, clear bubbles, and a layout that gets out of your way.</p>
                 <ul class="feature-list">
-                    <li>✓ Smart notifications</li>
-                    <li>✓ Presence indicators</li>
-                    <li>✓ Last seen tracking</li>
+                    <li>Dark-first design</li>
+                    <li>Clear message bubbles</li>
+                    <li>Minimal, fast UI</li>
                 </ul>
             </div>
             <div class="showcase-image">
-                <div class="image-placeholder">🎯</div>
+                <div class="image-placeholder">◆</div>
             </div>
         </div>
     </section>
@@ -229,43 +223,40 @@
     <!-- Testimonials Section -->
     <section id="testimonials" class="testimonials">
         <div class="section-header">
-            <h2>Loved by Users Worldwide</h2>
-            <p>See what people are saying about Chatter</p>
+            <h2>What people say</h2>
+            <p>Real feedback from people who use Chatter</p>
         </div>
         <div class="testimonials-grid">
             <div class="testimonial-card">
-                <div class="rating">⭐⭐⭐⭐⭐</div>
-                <p>"Chatter is hands down the best messaging app I've used. It's fast, reliable, and the UI is
-                    beautiful!"</p>
+                <div class="rating">★★★★★</div>
+                <p>"Finally an app that lets me use chat on my phone and laptop. Linking with QR was super easy."</p>
                 <div class="testimonial-author">
                     <div class="avatar">AJ</div>
                     <div>
-                        <strong>Alex Johnson</strong>
-                        <span>Tech Enthusiast</span>
+                        <strong>Alex J.</strong>
+                        <span>Product designer</span>
                     </div>
                 </div>
             </div>
             <div class="testimonial-card">
-                <div class="rating">⭐⭐⭐⭐⭐</div>
-                <p>"Finally, a messaging app that respects my privacy and doesn't track everything. Highly recommended!"
-                </p>
+                <div class="rating">★★★★★</div>
+                <p>"Read receipts and online status actually work. No more 'did you get my text?'"</p>
                 <div class="testimonial-author">
                     <div class="avatar">SK</div>
                     <div>
-                        <strong>Sarah Kim</strong>
-                        <span>Privacy Advocate</span>
+                        <strong>Sarah K.</strong>
+                        <span>Developer</span>
                     </div>
                 </div>
             </div>
             <div class="testimonial-card">
-                <div class="rating">⭐⭐⭐⭐⭐</div>
-                <p>"The real-time features are amazing. I love seeing when my friends are online. Chatter changed my
-                    texting!"</p>
+                <div class="rating">★★★★★</div>
+                <p>"Clean, fast, and the dark theme is easy on the eyes. My daily driver for messaging."</p>
                 <div class="testimonial-author">
                     <div class="avatar">MC</div>
                     <div>
-                        <strong>Mike Chen</strong>
-                        <span>Mobile App Developer</span>
+                        <strong>Mike C.</strong>
+                        <span>Student</span>
                     </div>
                 </div>
             </div>
@@ -274,13 +265,13 @@
 
     <!-- CTA Section -->
     <section class="cta">
-        <h2>Ready to Chat Better?</h2>
-        <p>Join millions of users already connected with Chatter. Download now and start messaging!</p>
+        <h2>Start chatting today</h2>
+        <p>Download the app or open Chatter in your browser. No credit card, no signup wall — just chat.</p>
         <div class="cta-buttons">
-            <button class="btn-primary btn-large">Download for iOS</button>
-            <button class="btn-primary btn-large">Download for Android</button>
+            <button class="btn-primary btn-large cta-download">Download for Android</button>
+            <a href="https://chatter-mobo-app.onrender.com" class="btn-cta-outline btn-large" target="_blank" rel="noopener">Open Web App</a>
         </div>
-        <p class="cta-note">Free forever • No credit card required • Works offline</p>
+        <p class="cta-note">Free • Encrypted • Works on phone + web</p>
     </section>
 
     <!-- Footer -->
@@ -288,39 +279,33 @@
         <div class="footer-content">
             <div class="footer-section">
                 <h4>Chatter</h4>
-                <p>Real-time messaging for everyone.</p>
+                <p>Real-time messaging for everyone. Chat on mobile and web.</p>
                 <div class="social-links">
-                    <a href="#" aria-label="Facebook">f</a>
                     <a href="#" aria-label="Twitter">𝕏</a>
-                    <a href="#" aria-label="Instagram">📷</a>
+                    <a href="#" aria-label="GitHub">⌘</a>
                     <a href="#" aria-label="LinkedIn">in</a>
                 </div>
             </div>
             <div class="footer-section">
                 <h4>Product</h4>
                 <ul>
-                    <li><a href="#">Features</a></li>
-                    <li><a href="#">Pricing</a></li>
-                    <li><a href="#">Security</a></li>
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="https://chatter-mobo-app.onrender.com" target="_blank" rel="noopener">Web App</a></li>
                     <li><a href="#">Download</a></li>
                 </ul>
             </div>
             <div class="footer-section">
                 <h4>Company</h4>
                 <ul>
-                    <li><a href="#">About Us</a></li>
-                    <li><a href="#">Blog</a></li>
-                    <li><a href="#">Careers</a></li>
+                    <li><a href="#">About</a></li>
                     <li><a href="#">Contact</a></li>
                 </ul>
             </div>
             <div class="footer-section">
                 <h4>Legal</h4>
                 <ul>
-                    <li><a href="#">Privacy Policy</a></li>
-                    <li><a href="#">Terms of Service</a></li>
-                    <li><a href="#">Cookie Policy</a></li>
-                    <li><a href="#">Status</a></li>
+                    <li><a href="#">Privacy</a></li>
+                    <li><a href="#">Terms</a></li>
                 </ul>
             </div>
         </div>

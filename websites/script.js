@@ -97,24 +97,17 @@ function initializeHamburger() {
 // ============================================
 
 function initializeButtons() {
-    const downloadButtons = document.querySelectorAll('.btn-primary, .btn-outline');
+    const downloadButtons = document.querySelectorAll('.nav-download, .hero-download, .cta-download');
 
     downloadButtons.forEach(button => {
         button.addEventListener('click', function () {
-            const text = this.textContent.toLowerCase();
-
-            if (text.includes('download')) {
-                // Create a temporary link element to trigger download
-                const link = document.createElement('a');
-                link.href = './app-release.apk';
-                link.download = 'Chatter-App.apk';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                showNotification('Download started! 📱', 'success');
-            } else if (text.includes('demo')) {
-                showNotification('Feature coming soon! We\'re preparing the demo.', 'info');
-            }
+            const link = document.createElement('a');
+            link.href = './app-release.apk';
+            link.download = 'Chatter-App.apk';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showNotification('Download started! 📱', 'success');
         });
     });
 
@@ -182,7 +175,7 @@ function showNotification(message, type = 'info') {
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     `;
 
-    const bgColor = type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6';
+    const bgColor = type === 'success' ? '#00D4C2' : type === 'error' ? '#ef4444' : '#1a1f2e';
     notification.style.backgroundColor = bgColor;
     notification.style.color = 'white';
     notification.textContent = message;
@@ -279,8 +272,8 @@ function createScrollToTopButton() {
         width: 50px;
         height: 50px;
         border-radius: 50%;
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-        color: white;
+        background: rgba(0, 212, 194, 0.9);
+        color: #0F1419;
         border: none;
         cursor: pointer;
         display: none;
@@ -288,7 +281,7 @@ function createScrollToTopButton() {
         justify-content: center;
         font-size: 1.5rem;
         z-index: 999;
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+        box-shadow: 0 4px 16px rgba(0, 212, 194, 0.35);
         transition: all 0.3s ease;
     `;
 
@@ -402,6 +395,6 @@ document.addEventListener('DOMContentLoaded', () => {
 // CONSOLE MESSAGE
 // ============================================
 
-console.log('%cWelcome to Chatter! 👋', 'font-size: 20px; color: #6366f1; font-weight: bold;');
-console.log('%cJoin thousands of users enjoying real-time messaging.', 'font-size: 14px; color: #8b5cf6;');
-console.log('%cVisit: https://chatter-mobo-app.onrender.com', 'font-size: 12px; color: #666;');
+console.log('%cChatter ◆', 'font-size: 20px; color: #00D4C2; font-weight: bold;');
+console.log('%cReal-time messaging, encrypted & simple.', 'font-size: 14px; color: rgba(200,210,234,0.9);');
+console.log('%cWeb app: https://chatter-mobo-app.onrender.com', 'font-size: 12px; color: #6b7280;');
