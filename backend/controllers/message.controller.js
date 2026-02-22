@@ -1,5 +1,79 @@
 import Message from "../models/message.model.js";
 
+// Helper: parse chatId (format "chat_phone1_phone2") to [phone1, phone2]
+const parseChatId = (chatIdParam) => {
+    if (!chatIdParam || typeof chatIdParam !== "string") return null;
+    try {
+        const chatId = decodeURIComponent(chatIdParam);
+        if (!chatId.startsWith("chat_")) return null;
+        const parts = chatId.split("_").slice(1);
+        if (parts.length < 2) return null;
+        return parts;
+    } catch {
+        return null;
+    }
+};
+
+// Get messages by chatId (for web app retrieval by chat)
+export const getMessagesByChatId = async (req, res) => {
+    try {
+        const userPhoneNumber = req.user?.phoneNumber;
+        const { chatId } = req.params;
+
+        if (!userPhoneNumber) {
+            return res.status(401).json({
+                success: false,
+                error: "Unauthorized: user not found."
+            });
+        }
+
+        if (!chatId) {
+            return res.status(400).json({
+                success: false,
+                error: "chatId is required (format: chat_phone1_phone2)."
+            });
+        }
+
+        const phones = parseChatId(chatId);
+        if (!phones || phones.length < 2) {
+            return res.status(400).json({
+                success: false,
+                error: "Invalid chatId format. Use chat_phone1_phone2."
+            });
+        }
+
+        const [p1, p2] = phones;
+        if (userPhoneNumber !== p1 && userPhoneNumber !== p2) {
+            return res.status(403).json({
+                success: false,
+                error: "You can only access messages for chats you are part of."
+            });
+        }
+
+        const messages = await Message.find({
+            $or: [
+                { sender: p1, receiver: p2 },
+                { sender: p2, receiver: p1 }
+            ]
+        })
+            .sort({ createdAt: 1 })
+            .lean();
+
+        return res.status(200).json({
+            success: true,
+            count: messages.length,
+            data: messages,
+            chatId
+        });
+    } catch (error) {
+        console.error("Error fetching messages by chatId:", error);
+        return res.status(500).json({
+            success: false,
+            error: "Internal server error."
+        });
+    }
+};
+
 // get message controller
 
 export const getMessagesBetweenUsers = async (req, res) => {

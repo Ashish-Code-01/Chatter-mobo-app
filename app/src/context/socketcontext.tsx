@@ -9,7 +9,6 @@ import React, {
 } from 'react';
 import { io, Socket } from 'socket.io-client';
 
-// const API_URL = "http://10.119.77.98:8000"; // Update for production
 const API_URL = "https://chatter-mobo-app.onrender.com/";
 
 interface SocketContextType {
@@ -33,6 +32,10 @@ interface SocketContextType {
     onBulkMessageSync: (callback: (data: any) => void) => void;
     onDeviceLinked: (callback: (data: any) => void) => void;
     onMessageStatusChanged: (callback: (data: any) => void) => void;
+    emitTypingStart: (to: string) => void;
+    emitTypingStop: (to: string) => void;
+    onTypingIndicator: (callback: (data: { from: string; isTyping: boolean }) => void) => void;
+    offTypingIndicator: () => void;
     offMessageReceived: () => void;
     offStatusChanged: () => void;
     offMessageSynced: () => void;
@@ -61,6 +64,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     const bulkMessageSyncCallbackRef = useRef<((data: any) => void) | null>(null);
     const deviceLinkedCallbackRef = useRef<((data: any) => void) | null>(null);
     const messageStatusChangedCallbackRef = useRef<((data: any) => void) | null>(null);
+    const typingIndicatorCallbackRef = useRef<((data: { from: string; isTyping: boolean }) => void) | null>(null);
 
     // Initialize Socket Connection
     useEffect(() => {
@@ -69,11 +73,9 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         const initSocket = () => {
             // Avoid duplicate initialization
             if (isSocketInitialized || socketRef.current?.connected) {
-                console.log('Socket already initialized or connected');
                 return;
             }
 
-            console.log('🔌 Initializing socket connection...');
             isSocketInitialized = true;
 
             socketRef.current = io(API_URL, {
@@ -88,13 +90,11 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
             // Connection established
             socketRef.current.on('connect', () => {
-                console.log('✅ Socket connected successfully:', socketRef.current?.id);
                 setIsConnected(true);
             });
 
             // Connection lost
-            socketRef.current.on('disconnect', (reason) => {
-                console.log('❌ Socket disconnected:', reason);
+            socketRef.current.on('disconnect', (_reason) => {
                 setIsConnected(false);
                 setIsRegistered(false);
             });
@@ -120,37 +120,38 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
             // Message synced from another device
             socketRef.current.on('messageSynced', (data: any) => {
-                console.log('📨 Message synced from another device:', data);
                 messageSyncedCallbackRef.current?.(data);
             });
 
             // Bulk message sync (when device is linked)
             socketRef.current.on('bulkMessageSync', (data: any) => {
-                console.log(`📦 Bulk message sync batch ${data.batchIndex + 1}/${data.totalBatches}:`, data.messages.length, 'messages');
                 bulkMessageSyncCallbackRef.current?.(data);
             });
 
             // Device linked event
             socketRef.current.on('DeviceLinked', (data: any) => {
-                console.log('🔗 Device linked:', data);
+
                 deviceLinkedCallbackRef.current?.(data);
             });
 
             // Message status changed event
             socketRef.current.on('messageStatusChanged', (data: any) => {
-                console.log('✓ Message status changed:', data);
                 messageStatusChangedCallbackRef.current?.(data);
             });
 
             // Bulk message status changed event
             socketRef.current.on('bulkMessageStatusChanged', (data: any) => {
-                console.log('✓✓ Bulk message status changed:', data);
                 messageStatusChangedCallbackRef.current?.(data);
             });
 
             // Sync error
             socketRef.current.on('syncError', (data: any) => {
                 console.error('❌ Sync error:', data);
+            });
+
+            // Typing indicator
+            socketRef.current.on('typingIndicator', (data: { from: string; isTyping: boolean }) => {
+                typingIndicatorCallbackRef.current?.(data);
             });
         };
 
@@ -171,6 +172,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
                 socketRef.current.off('messageStatusChanged');
                 socketRef.current.off('bulkMessageStatusChanged');
                 socketRef.current.off('syncError');
+                socketRef.current.off('typingIndicator');
             }
         };
     }, []);
@@ -183,22 +185,15 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         }
 
         const doRegister = () => {
-            console.log('📱 Registering user:', phoneNumber);
             socketRef.current?.emit('register', phoneNumber);
             setCurrentUser(phoneNumber);
             setIsRegistered(true);
-            console.log('✅ User registration event emitted:', phoneNumber);
         };
 
         if (socketRef.current.connected) {
             doRegister();
         } else {
-            // Wait for connection
-            console.log('⏳ Waiting for socket connection before registering user...');
-            socketRef.current.once('connect', () => {
-                console.log('🔌 Socket now connected, registering user');
-                doRegister();
-            });
+            socketRef.current.once('connect', doRegister);
         }
     }, []);
 
@@ -217,7 +212,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
             setContactStatusMap({});
             messageCallbackRef.current = null;
             statusCallbackRef.current = null;
-            console.log('✅ User unregistered');
         } catch (error) {
             console.error('Error unregistering user:', error);
         }
@@ -297,20 +291,13 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     );
 
     const linkDevice = useCallback(
-        (socketId: string, token: string, serverkey: string, privatekey: string, Users?: any, deviceId?: string): boolean => {
-            if (!socketId || !token) {
-                console.error('SocketId or token missing for linkDevice');
-                return false;
-            }
-            if (!socketId.trim() || !token.trim()) {
-                console.error('Socket not initialized for linkDevice');
+        (socketId: string, token: string, privatekey: string, serverkey: string, Users?: any, deviceId?: string): boolean => {
+            if (!socketId?.trim() || !token?.trim()) {
                 return false;
             }
             if (!socketRef.current?.connected) {
-                console.warn('Socket not connected for linkDevice');
                 return false;
             }
-
             socketRef.current.emit('LinkDevice', { socketId, token, serverkey, privatekey, Users, deviceId });
             return true;
         },
@@ -332,7 +319,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
             return;
         }
 
-        console.log(`📱 Registering device ${deviceId} for user ${phoneNumber}`);
         socketRef.current.emit('registerDevice', { phoneNumber, deviceId });
     }, []);
 
@@ -351,7 +337,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
             return;
         }
 
-        console.log(`🔄 Requesting message sync for device ${deviceId}`);
         socketRef.current.emit('requestMessageSync', { phoneNumber, deviceId });
     }, []);
 
@@ -451,6 +436,29 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         messageStatusChangedCallbackRef.current = null;
     }, []);
 
+    // Emit typing start
+    const emitTypingStart = useCallback((to: string) => {
+        if (socketRef.current?.connected && currentUser) {
+            socketRef.current.emit('typingStart', { from: currentUser, to });
+        }
+    }, [currentUser]);
+
+    // Emit typing stop
+    const emitTypingStop = useCallback((to: string) => {
+        if (socketRef.current?.connected && currentUser) {
+            socketRef.current.emit('typingStop', { from: currentUser, to });
+        }
+    }, [currentUser]);
+
+    // Register typing indicator callback
+    const onTypingIndicator = useCallback((callback: (data: { from: string; isTyping: boolean }) => void) => {
+        typingIndicatorCallbackRef.current = callback;
+    }, []);
+
+    // Unregister typing indicator callback
+    const offTypingIndicator = useCallback(() => {
+        typingIndicatorCallbackRef.current = null;
+    }, []);
 
     const value: SocketContextType = {
         socket: socketRef.current,
@@ -479,6 +487,10 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         offBulkMessageSync,
         offDeviceLinked,
         offMessageStatusChanged,
+        emitTypingStart,
+        emitTypingStop,
+        onTypingIndicator,
+        offTypingIndicator,
     };
 
     return (

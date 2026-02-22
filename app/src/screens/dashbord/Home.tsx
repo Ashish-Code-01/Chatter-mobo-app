@@ -203,14 +203,13 @@ const Home = ({ navigation }: any) => {
     useEffect(() => {
         const handleDeviceLinked = async (data: any) => {
             try {
-                console.log('Device linked, starting message sync...');
                 const deviceId = await AsyncStorage.getItem("deviceId");
                 const userPhone = user?.phoneNumber;
-                
+
                 if (deviceId && userPhone) {
                     // Register device
                     registerDevice(userPhone, deviceId);
-                    
+
                     // Request message sync
                     setTimeout(() => {
                         requestMessageSync(userPhone, deviceId);
@@ -223,26 +222,25 @@ const Home = ({ navigation }: any) => {
 
         const handleBulkMessageSync = async (data: any) => {
             try {
-                console.log(`Received bulk message sync batch ${data.batchIndex + 1}/${data.totalBatches}`);
-                
+
                 // Store messages in AsyncStorage by chatId
                 const messages = data.messages || [];
                 const secretkey = await AsyncStorage.getItem("secretkey");
                 const userPhone = user?.phoneNumber;
-                
+
                 if (!userPhone) return;
 
                 // Group messages by chat partner
                 const messagesByChat: Record<string, any[]> = {};
-                
+
                 messages.forEach((msg: any) => {
                     const otherPhone = msg.sender === userPhone ? msg.receiver : msg.sender;
                     const chatId = `chat_${[userPhone, otherPhone].sort().join("_")}`;
-                    
+
                     if (!messagesByChat[chatId]) {
                         messagesByChat[chatId] = [];
                     }
-                    
+
                     // Decrypt message if we have the key
                     let decryptedContent = msg.content;
                     if (secretkey && msg.content) {
@@ -253,7 +251,7 @@ const Home = ({ navigation }: any) => {
                             console.error('Error decrypting synced message:', e);
                         }
                     }
-                    
+
                     messagesByChat[chatId].push({
                         from: msg.sender === userPhone ? "Me" : msg.sender,
                         message: decryptedContent,
@@ -268,19 +266,15 @@ const Home = ({ navigation }: any) => {
                     const existingMessages = existing ? JSON.parse(existing) : [];
                     const merged = [...existingMessages, ...chatMessages]
                         .sort((a: any, b: any) => a.timestamp - b.timestamp);
-                    
+
                     // Deduplicate
-                    const unique = merged.filter((msg: any, index: number, self: any[]) => 
-                        index === self.findIndex((m: any) => 
+                    const unique = merged.filter((msg: any, index: number, self: any[]) =>
+                        index === self.findIndex((m: any) =>
                             m.timestamp === msg.timestamp && m.message === msg.message
                         )
                     );
-                    
-                    await AsyncStorage.setItem(chatId, JSON.stringify(unique));
-                }
 
-                if (data.isLastBatch) {
-                    console.log('✅ Message sync completed');
+                    await AsyncStorage.setItem(chatId, JSON.stringify(unique));
                 }
             } catch (error) {
                 console.error('Error handling bulk message sync:', error);
@@ -312,7 +306,7 @@ const Home = ({ navigation }: any) => {
                     <Text style={styles.emptyText}>No contacts found.</Text>
                 }
                 contentContainerStyle={styles.flatListContent}
-                keyExtractor={(item) => item.id}
+                keyExtractor={(item) => item.id || item.phone}
                 renderItem={({ item }) => {
                     const unseen = unseenMessages[item.phone] || 0;
                     const isOnline = contactStatusMap[item.phone] || false;
@@ -371,10 +365,6 @@ const Home = ({ navigation }: any) => {
 
                         <TouchableOpacity style={styles.menuItem} onPress={handleLinkDevices}>
                             <Text style={styles.menuText}>Link Device</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity style={styles.menuItem}>
-                            <Text style={styles.menuText}>Settings</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>

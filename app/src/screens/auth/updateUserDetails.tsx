@@ -28,32 +28,28 @@ const EditDetails = ({ navigation }: any) => {
     const fetchUserDetails = async () => {
         const token = await AsyncStorage.getItem("token");
         if (!token) return;
+        const stored = await AsyncStorage.getItem("User");
         let userData;
-        if (AsyncStorage.getItem("User")) {
-            userData = JSON.parse(await AsyncStorage.getItem("User") || '{}');
-            setUser(userData);
-            console.log("form local");
-        }
-        else {
+        if (stored) {
+            userData = JSON.parse(stored);
+        } else {
             const { data } = await axios.post(
                 `${API_URL}/auth/me`,
                 {},
                 { headers: { token } }
             );
             userData = data.user;
-            console.log("Fetched user:", userData);
         }
         setUser(userData);
         setName(userData?.name || '');
         setBio(userData?.bio || '');
         setAvatar(userData?.avatar || '');
         await AsyncStorage.setItem("User", JSON.stringify(userData));
-    }
+    };
 
     useEffect(() => {
-
         fetchUserDetails();
-    }, [])
+    }, []);
 
 
     const handleChooseAvatar = () => {
@@ -179,7 +175,7 @@ const EditDetails = ({ navigation }: any) => {
                     <Text style={styles.label}>Bio</Text>
                     <TextInput
                         value={bio}
-                        onChangeText={setBio}        // FIXED: uses correct state
+                        onChangeText={setBio}
                         style={styles.input}
                         placeholder="This is my bio"
                         placeholderTextColor="#A1A1B5"

@@ -53,7 +53,7 @@ const ChatScreen = () => {
     }, []);
 
     // Encrypt Message
-    const encryptMessage = useCallback((text: string, key: string) => {
+    const encryptMessage = useCallback((text, key) => {
         if (!text || !key) {
             console.error("Text or key is missing for encryption");
             return text || "";
@@ -80,7 +80,7 @@ const ChatScreen = () => {
     }, [alphabet]);
 
     // Decrypt Message
-    const decryptMessage = useCallback((encryptedText: string, key: string) => {
+    const decryptMessage = useCallback((encryptedText, key) => {
         let decryptedText = "";
 
         for (let i = 0; i < encryptedText.length; i++) {
@@ -131,7 +131,7 @@ const ChatScreen = () => {
     }, []);
 
     // Fetch contact status
-    const fetchContactStatus = useCallback(async (phone: string) => {
+    const fetchContactStatus = useCallback(async (phone) => {
         try {
             const response = await axios.get(`${API_URL}/api/online/status/${phone}`);
             if (response.data?.success) {
@@ -245,15 +245,15 @@ const ChatScreen = () => {
         }
     }, [contactPhone, contactName, unseenMessages, fetchContactStatus]);
 
-    // Fetch messages from backend
+    // Fetch messages from backend by chatId (saved with chatId for retrieval and display)
     const fetchMessagesFromBackend = useCallback(async () => {
         try {
             const token = localStorage.getItem("token");
             if (!token) return;
 
-            const response = await axios.post(
-                `${API_URL}/api/messages/get/${contactPhone}`,
-                {},
+            const encodedChatId = encodeURIComponent(chatId);
+            const response = await axios.get(
+                `${API_URL}/api/messages/chat/${encodedChatId}`,
                 {
                     headers: {
                         'Content-Type': 'application/json',
@@ -273,6 +273,8 @@ const ChatScreen = () => {
                         from: msg.sender === user?.phoneNumber ? "Me" : msg.sender,
                         message: decryptedContent,
                         timestamp: new Date(msg.createdAt).getTime(),
+                        messageId: msg._id,
+                        status: msg.status || 'sent',
                     };
                 } catch (error) {
                     console.error("Error decrypting message:", error);
@@ -280,17 +282,17 @@ const ChatScreen = () => {
                         from: msg.sender === user?.phoneNumber ? "Me" : msg.sender,
                         message: "[Decryption failed]",
                         timestamp: new Date(msg.createdAt).getTime(),
+                        messageId: msg._id,
+                        status: msg.status || 'sent',
                     };
                 }
             });
 
-            setMessages((prev) => {
-                const merged = dedupeMessages([...prev, ...backendMsgs]).sort(
-                    (a, b) => a.timestamp - b.timestamp
-                );
-                localStorage.setItem(chatId, JSON.stringify(merged));
-                return merged;
-            });
+            const merged = dedupeMessages([...backendMsgs]).sort(
+                (a, b) => a.timestamp - b.timestamp
+            );
+            localStorage.setItem(chatId, JSON.stringify(merged));
+            setMessages(merged);
         } catch (error) {
             console.error("Error fetching messages:", error);
         }
@@ -378,7 +380,7 @@ const ChatScreen = () => {
     }, [contactPhone, chatId]);
 
     // Helper function to process and add messages
-    const processAndAddMessage = useCallback((from: string, to: string, encryptedMsg: string, publickey: string, files: string | undefined, timestamp: string | number | undefined) => {
+    const processAndAddMessage = useCallback(async (from, to, encryptedMsg, publickey, files, timestamp) => {
         // Only process messages relevant to current chat
         const isRelevant = (from === contactPhone && to === user?.phoneNumber) ||
             (to === contactPhone && from === user?.phoneNumber);
@@ -388,23 +390,9 @@ const ChatScreen = () => {
         }
 
         // Decrypt message
-        let keyToUse = secretKey;
-        if (!keyToUse) {
-            const privatekey = localStorage.getItem("privatekey");
-            if (publickey && privatekey) {
-                keyToUse = publickey + privatekey;
-            } else {
-                const serverkey = localStorage.getItem("serverkey");
-                if (privatekey && serverkey) {
-                    keyToUse = privatekey + serverkey;
-                }
-            }
-        }
-
-        if (!keyToUse) {
-            console.error("No decryption key available for message");
-            return;
-        }
+        let keyToUse = await localStorage.getItem("secretkey");
+        const privatekey = await localStorage.getItem("privatekey");
+        keyToUse = publickey + privatekey;
 
         try {
             const decryptedMsg = decryptMessage(encryptedMsg, keyToUse);
@@ -448,7 +436,7 @@ const ChatScreen = () => {
 
     // Listen for incoming messages from online users
     useEffect(() => {
-        const handleMessageReceived = ({ from, message: encryptedMsg, publickey, files }: { from: string; message: string; publickey: string; files: string }) => {
+            const handleMessageReceived = ({ from, message: encryptedMsg, publickey, files }) => {
             processAndAddMessage(from, user?.phoneNumber || '', encryptedMsg, publickey, files, Date.now());
         };
 
@@ -461,7 +449,7 @@ const ChatScreen = () => {
 
     // Listen for synced messages
     useEffect(() => {
-        const handleMessageSynced = ({ from, to, message: encryptedMsg, publickey, files, timestamp, messageId }: { from: string; to: string; message: string, publickey: string, files: string, timestamp: string; messageId: string }) => {
+        const handleMessageSynced = ({ from, to, message: encryptedMsg, publickey, files, timestamp, messageId }) => {
             processAndAddMessage(from, to, encryptedMsg, publickey, files, timestamp);
         };
 
@@ -474,7 +462,7 @@ const ChatScreen = () => {
 
     // Listen for bulk message sync (when device first connects)
     useEffect(() => {
-        const handleBulkMessageSync = ({ messages: syncedMessages, batchIndex, totalBatches, isLastBatch }: { messages: any[], batchIndex: number, totalBatches: number, isLastBatch: boolean }) => {
+        const handleBulkMessageSync = ({ messages: syncedMessages, batchIndex, totalBatches, isLastBatch }) => {
             console.log(`📦 Received message sync batch ${batchIndex + 1}/${totalBatches}: ${syncedMessages.length} messages`);
 
             const secretkey = localStorage.getItem("secretkey") || '';
@@ -635,7 +623,7 @@ const ChatScreen = () => {
     };
 
     // Handle chat selection
-    const handleChatSelect = async (chat: any) => {
+    const handleChatSelect = async (chat) => {
         setSelectedChat(chat);
         setLoading(true);
 
@@ -659,11 +647,11 @@ const ChatScreen = () => {
                 setContactAvatar(DEFAULT_AVATAR);
             }
 
-            // Fetch messages from backend
+            // Fetch messages from backend by chatId and save with chatId for retrieval/display
             const token = localStorage.getItem("token");
-            const msgResponse = await axios.post(
-                `${API_URL}/api/messages/get/${chat.phone}`,
-                {},
+            const encodedChatId = encodeURIComponent(chatIdForContact);
+            const msgResponse = await axios.get(
+                `${API_URL}/api/messages/chat/${encodedChatId}`,
                 {
                     headers: {
                         'Content-Type': 'application/json',
@@ -682,17 +670,23 @@ const ChatScreen = () => {
                         from: msg.sender === user?.phoneNumber ? "Me" : msg.sender,
                         message: decryptedContent,
                         timestamp: new Date(msg.createdAt).getTime(),
+                        messageId: msg._id,
+                        status: msg.status || 'sent',
                     };
                 } catch (error) {
                     return {
                         from: msg.sender === user?.phoneNumber ? "Me" : msg.sender,
                         message: "[Decryption failed]",
                         timestamp: new Date(msg.createdAt).getTime(),
+                        messageId: msg._id,
+                        status: msg.status || 'sent',
                     };
                 }
             });
 
-            setMessages(backendMsgs.sort((a, b) => a.timestamp - b.timestamp));
+            const sorted = backendMsgs.sort((a, b) => a.timestamp - b.timestamp);
+            localStorage.setItem(chatIdForContact, JSON.stringify(sorted));
+            setMessages(sorted);
 
             // Mark as seen
             await axios.post(
@@ -713,7 +707,7 @@ const ChatScreen = () => {
         }
     };
 
-    const formatTime = (timestamp: any) => {
+        const formatTime = (timestamp) => {
         return new Date(timestamp).toLocaleTimeString([], {
             hour: '2-digit',
             minute: '2-digit',

@@ -21,8 +21,6 @@ import MessageTicks from "../../components/MessageTicks";
 const API_URL = "https://chatter-mobo-app.onrender.com";
 const DEFAULT_AVATAR = "https://res.cloudinary.com/dqmxpgv5k/image/upload/v1765892967/A_circular_default_c_cafouy.png";
 
-// Interface for bulk sync messages
-
 interface Message {
     from: string;
     message: string;
@@ -40,18 +38,17 @@ interface RouteParams {
 
 export default function ChatToContact({ route, navigation }: { route: { params: RouteParams }, navigation: any }) {
     const { myPhone, contactPhone, contactName } = route.params;
-    const { isConnected, onMessageReceived, offMessageReceived, onStatusChanged, offStatusChanged, sendMessage, onMessageSynced, offMessageSynced, requestMessageSync, onMessageStatusChanged, offMessageStatusChanged, markMessageDelivered, markMessageSeen } = useSocket();
+    const { isConnected, onMessageReceived, offMessageReceived, onStatusChanged, offStatusChanged, sendMessage, requestMessageSync, onMessageStatusChanged, offMessageStatusChanged, markMessageDelivered, markMessageSeen, emitTypingStart, emitTypingStop, onTypingIndicator, offTypingIndicator } = useSocket();
 
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
     const [secretKey, setSecretKey] = useState<string>("");
     const [contactIsOnline, setContactIsOnline] = useState(false);
+    const [contactTyping, setContactTyping] = useState(false);
     const [contactAvatar, setContactAvatar] = useState<string>("");
     const [deviceId, setDeviceId] = useState<string>("");
-    const [isTyping, setIsTyping] = useState(false);
-    const [contactTyping, setContactTyping] = useState(false);
-    const typingTimeoutRef = useRef<any>(null);
+    const typingStopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const alphabet = useMemo(() => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,?!'_-&@#$%*()/:<>|+= ", []);
 
@@ -185,7 +182,6 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
         if (!isConnected) return;
 
         const handleMessageReceived = async ({ from, message: encryptedMsg, publickey, files, messageId, status }: { from: string; message: string; publickey: string, files: [], messageId?: string; status?: string }) => {
-            console.log(`Message from ${from}: ${encryptedMsg}`);
             try {
                 if (from === myPhone) return;
 
@@ -246,7 +242,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
         };
     }, [isConnected, secretKey, dedupeMessages, chatId, myPhone, onMessageReceived, offMessageReceived]);
 
-    // Setup status listener
+    // Status listener
     useEffect(() => {
         const handleStatusChanged = ({ phoneNumber, isOnline }: { phoneNumber: string; isOnline: boolean }) => {
             if (phoneNumber === contactPhone) {
@@ -261,99 +257,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
         };
     }, [contactPhone, onStatusChanged, offStatusChanged]);
 
-    // Setup message sync listener
-    useEffect(() => {
-        if (!isConnected) return;
-
-        const handleMessageSynced = async ({ from, to, message: encryptedMsg, publickey, files, timestamp, messageId }: {
-            from: string;
-            to: string;
-            message: string;
-            publickey: string;
-            files: any;
-            timestamp: Date | string;
-            messageId?: string;
-        }) => {
-            try {
-                // Only process messages relevant to this chat
-                if ((from !== contactPhone && to !== contactPhone) || (from !== myPhone && to !== myPhone)) {
-                    return;
-                }
-
-                // Skip if this is a message we already have (check by messageId or content+timestamp)
-                const msgTimestamp = typeof timestamp === 'string' ? new Date(timestamp).getTime() : timestamp.getTime();
-                const existingMsg = messages.find(m => {
-                    if (messageId && m.timestamp === msgTimestamp) return true;
-                    const timeDiff = Math.abs(m.timestamp - msgTimestamp);
-                    return timeDiff < 1000; // Within 1 second
-                });
-                if (existingMsg) {
-                    return;
-                }
-
-                let keyToUse = secretKey;
-                if (!keyToUse) {
-                    const privatekey = await AsyncStorage.getItem("privatekey");
-                    if (publickey && privatekey) {
-                        keyToUse = publickey + privatekey;
-                    } else {
-                        const serverkey = await AsyncStorage.getItem("serverkey");
-                        if (privatekey && serverkey) {
-                            keyToUse = privatekey + serverkey;
-                        }
-                    }
-                }
-
-                if (!keyToUse) {
-                    console.error("No decryption key available for synced message");
-                    return;
-                }
-
-                const decryptedMsg = decryptMessage(encryptedMsg, keyToUse);
-
-                const newMsg: Message = {
-                    from: from === myPhone ? "Me" : from,
-                    message: decryptedMsg,
-                    timestamp: msgTimestamp,
-                    file: files || undefined,
-                };
-
-                setMessages((prev) => {
-                    const merged = dedupeMessages([...prev, newMsg]).sort(
-                        (a, b) => a.timestamp - b.timestamp
-                    );
-                    AsyncStorage.setItem(chatId, JSON.stringify(merged));
-                    return merged;
-                });
-            } catch (error) {
-                console.error("Error handling synced message:", error);
-            }
-        };
-
-        onMessageSynced(handleMessageSynced);
-
-        return () => {
-            offMessageSynced();
-        };
-    }, [isConnected, contactPhone, myPhone, secretKey, chatId, messages, dedupeMessages, onMessageSynced, offMessageSynced]);
-
-
-    // Setup typing indicator handler
-    useEffect(() => {
-        const handleTypingIndicator = ({ from, isTyping: typing }: { from: string; isTyping: boolean }) => {
-            if (from === contactPhone) {
-                setContactTyping(typing);
-            }
-        };
-
-        onStatusChanged(handleTypingIndicator);
-
-        return () => {
-            offStatusChanged();
-        };
-    }, [contactPhone, onStatusChanged, offStatusChanged]);
-
-    // Setup message status listener (for delivery and read receipts)
+    // Message status listener (delivery and read receipts)
     useEffect(() => {
         const handleMessageStatusChanged = ({ messageId, status }: { messageId: string; status: 'sent' | 'delivered' | 'seen' }) => {
             if (!messageId) return;
@@ -361,7 +265,6 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
             setMessages((prev) => {
                 const updated = prev.map((msg) => {
                     if (msg.messageId === messageId || (msg.timestamp && msg.from === 'Me')) {
-                        // Update the message status
                         return { ...msg, messageId, status };
                     }
                     return msg;
@@ -378,6 +281,26 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
         };
     }, [chatId, onMessageStatusChanged, offMessageStatusChanged]);
 
+    // Typing indicator listener
+    useEffect(() => {
+        const handleTyping = ({ from, isTyping }: { from: string; isTyping: boolean }) => {
+            if (from === contactPhone) {
+                setContactTyping(isTyping);
+            }
+        };
+
+        onTypingIndicator(handleTyping);
+
+        return () => {
+            offTypingIndicator();
+            if (typingStopTimeoutRef.current) {
+                clearTimeout(typingStopTimeoutRef.current);
+                typingStopTimeoutRef.current = null;
+            }
+            emitTypingStop(contactPhone);
+        };
+    }, [contactPhone, onTypingIndicator, offTypingIndicator, emitTypingStop]);
+
     useEffect(() => {
         (async () => {
             try {
@@ -388,7 +311,6 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
 
                     // Request message sync for this device if socket is connected
                     if (isConnected && myPhone) {
-                        console.log(`🔄 Requesting message sync for device ${storedDeviceId}`);
                         requestMessageSync(myPhone, storedDeviceId);
                     }
                 }
@@ -410,7 +332,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                 setLoading(false);
             }
         })();
-    }, [isConnected, myPhone, isConnected ? myPhone : null]);
+    }, [isConnected, myPhone]);
 
     const fetchContactStatus = async () => {
         try {
@@ -453,7 +375,6 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
             );
 
             const raw = res.data?.data || [];
-            console.log("Messages from backend:", raw);
             const secretkey = await AsyncStorage.getItem("secretkey");
 
             const backendMsgs: Message[] = raw.map((msg: any) => {
@@ -493,31 +414,26 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
     };
 
 
+    const TYPING_STOP_DELAY_MS = 2500;
 
     const handleTextChange = useCallback((text: string) => {
         setMessage(text);
 
-        // Clear previous typing timeout
-        if (typingTimeoutRef.current) {
-            clearTimeout(typingTimeoutRef.current);
+        if (typingStopTimeoutRef.current) {
+            clearTimeout(typingStopTimeoutRef.current);
+            typingStopTimeoutRef.current = null;
         }
 
-        // Emit typing started if not already typing
-        if (!isTyping && text.length > 0) {
-            setIsTyping(true);
-            // Can emit typing indicator event here if socket supports it
-        }
-
-        // Set timeout to emit typing stopped after 3 seconds of no input
         if (text.length > 0) {
-            typingTimeoutRef.current = setTimeout(() => {
-                setIsTyping(false);
-                // Can emit typing stopped event here
-            }, 3000);
+            emitTypingStart(contactPhone);
+            typingStopTimeoutRef.current = setTimeout(() => {
+                emitTypingStop(contactPhone);
+                typingStopTimeoutRef.current = null;
+            }, TYPING_STOP_DELAY_MS);
         } else {
-            setIsTyping(false);
+            emitTypingStop(contactPhone);
         }
-    }, [isTyping]);
+    }, [contactPhone, emitTypingStart, emitTypingStop]);
 
     const handleSend = useCallback(async () => {
         try {
@@ -556,6 +472,7 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                 const updated = [...prev, newMsg];
                 AsyncStorage.setItem(chatId, JSON.stringify(updated));
                 return updated;
+
             });
 
             const encryptedMsg = encryptMessage(text, keyToUse);
@@ -566,13 +483,14 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
 
             const publickey = keyToUse.substring(0, 16);
 
+            emitTypingStop(contactPhone);
             sendMessage(contactPhone, encryptedMsg, publickey, undefined, deviceId);
 
         } catch (error) {
             console.error("Error sending message:", error);
             Alert.alert("Error", "Failed to send message");
         }
-    }, [message, secretKey, chatId, contactPhone, sendMessage, encryptMessage, deviceId]);
+    }, [message, secretKey, chatId, contactPhone, sendMessage, deviceId, emitTypingStop]);
 
 
     const handleAttachDocument = async () => {
@@ -583,7 +501,6 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                 quality: 1,
             });
 
-            console.log(`Selected ${results.length} file(s)`);
 
             const maxSize = 10 * 1024 * 1024;
             const oversizedFiles = results.filter(file => file.size && file.size > maxSize);
@@ -714,6 +631,17 @@ export default function ChatToContact({ route, navigation }: { route: { params: 
                     renderItem={renderMessage}
                     contentContainerStyle={styles.messageList}
                     onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+                    ListFooterComponent={
+                        contactTyping ? (
+                            <View style={styles.typingIndicatorWrap}>
+                                <View style={styles.typingBubble}>
+                                    <Text style={styles.typingText} numberOfLines={1}>
+                                        {contactName || contactPhone} is typing...
+                                    </Text>
+                                </View>
+                            </View>
+                        ) : null
+                    }
                 />
             )}
 
@@ -893,6 +821,33 @@ const styles = StyleSheet.create({
         fontWeight: "400",
         marginRight: 5,
     },
+
+    typingIndicatorWrap: {
+        alignSelf: "flex-start",
+        marginVertical: 8,
+        maxWidth: "85%",
+    },
+
+    typingBubble: {
+        backgroundColor: "rgba(255, 255, 255, 0.08)",
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderRadius: 18,
+        borderBottomLeftRadius: 6,
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        borderBottomRightRadius: 20,
+        borderWidth: 1,
+        borderColor: "rgba(0, 212, 194, 0.2)",
+    },
+
+    typingText: {
+        fontSize: 13,
+        color: "rgba(200, 210, 234, 0.9)",
+        fontStyle: "italic",
+        fontWeight: "500",
+    },
+
     inputRow: {
         flexDirection: "row",
         alignItems: "flex-end",

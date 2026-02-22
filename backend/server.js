@@ -126,11 +126,13 @@ io.on("connection", (socket) => {
             const receiverSocketId = connectedUsers.get(to);
             let savedMessage = null;
 
-            // Save message to database
+            // Save message to database (chatId for retrieval by chat in web app)
+            const chatId = `chat_${[from, to].sort().join("_")}`;
             try {
                 savedMessage = await Message.create({
                     sender: from,
                     receiver: to,
+                    chatId,
                     content: message,  // Store encrypted content
                     file: files || null,
                     Publickey: publickey || "",  // Store public key for decryption
@@ -211,6 +213,23 @@ io.on("connection", (socket) => {
         } catch (error) {
             console.error("❌ Error in sendMessage handler:", error.message);
             socket.emit('error', { message: 'Failed to send message' });
+        }
+    });
+
+    // Typing indicator: forward to the chat partner
+    socket.on("typingStart", ({ from, to }) => {
+        if (!from || !to) return;
+        const receiverSocketId = connectedUsers.get(to);
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("typingIndicator", { from, isTyping: true });
+        }
+    });
+
+    socket.on("typingStop", ({ from, to }) => {
+        if (!from || !to) return;
+        const receiverSocketId = connectedUsers.get(to);
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("typingIndicator", { from, isTyping: false });
         }
     });
 

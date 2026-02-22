@@ -11,6 +11,10 @@ const messageSchema = new mongoose.Schema({
         ref: "User",
         required: true,
     },
+    chatId: {
+        type: String,
+        required: false,
+    },
     content: {
         type: String,
     },
@@ -42,6 +46,7 @@ const messageSchema = new mongoose.Schema({
 
 // Create database indexes for frequently queried fields
 messageSchema.index({ sender: 1, receiver: 1 });
+messageSchema.index({ chatId: 1, createdAt: 1 });
 messageSchema.index({ receiver: 1, seen: 1 });
 messageSchema.index({ createdAt: -1 });
 

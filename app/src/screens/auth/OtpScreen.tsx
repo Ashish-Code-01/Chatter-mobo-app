@@ -92,7 +92,6 @@ const OtpScreen = ({ route, navigation }: { route: any; navigation: any }) => {
                 await AsyncStorage.setItem('User', JSON.stringify(response.data.data.user));
                 await AsyncStorage.setItem('serverkey', response.data.data.serverkey);
                 await AsyncStorage.setItem('privatekey', generatePrivateKey(16));
-                console.log(generatePrivateKey(16));
                 Alert.alert('Success', 'OTP verified successfully');
                 navigation.replace('EditDetails');
             } else {
@@ -109,7 +108,6 @@ const OtpScreen = ({ route, navigation }: { route: any; navigation: any }) => {
 
     return (
         <View style={styles.container}>
-            {/* Simulated gradient background overlay */}
             <View style={styles.backgroundOverlay} />
 
             <Animated.View style={[styles.card, { opacity: fadeAnim }]}>
